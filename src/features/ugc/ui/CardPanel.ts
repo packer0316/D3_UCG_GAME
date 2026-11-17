@@ -9,7 +9,8 @@ import { MAX_LEVEL } from '@game/ugc/UgcDefine';
 import { FISH_SCENE_LIMIT, isSkyScene } from '@game/define/SceneDefine';
 import type { UgcClient } from '../UgcClient';
 import { Panel } from './Panel';
-import { clear, decoIcon, el, fishIcon, fishName, fmt, fmtMult, fmtPct, rarityTag, sceneChip } from './dom';
+import { clear, el, fishName, fmt, fmtMult, fmtPct, rarityTag } from './dom';
+import { createSummonCard } from './SummonCard';
 
 export class CardPanel {
   readonly panel: Panel;
@@ -22,7 +23,7 @@ export class CardPanel {
     private readonly ctx: GameContext,
     private readonly ugc: UgcClient,
   ) {
-    this.panel = new Panel(ctx.ui, { title: '魚卡', width: 940, height: 580 });
+    this.panel = new Panel(ctx.ui, { title: '魚卡', width: 940, height: 580, className: 'collection-panel' });
     this.panel.body.append(el('div', 'ugc-cards', el('div', 'ugc-card-left', this.grid, this.extras), this.detail));
     this.panel.onOpen = () => this.render();
     ctx.events.on('ugc:profile', () => this.panel.isOpen && this.render());
@@ -36,34 +37,30 @@ export class CardPanel {
     clear(this.grid);
     for (const t of CARD_FISH_TYPES) {
       const card = p.fish[t];
-      const tile = el(
-        'button',
-        `ugc-card${card ? '' : ' locked'}${t === this.selected ? ' on' : ''}`,
-        fishIcon(this.ctx.ui, t, 62),
-        el('span', 'ugc-card-name', fishName(t)),
-        el('span', 'ugc-card-lv', card ? `Lv.${card.level}` : '未擁有'),
-      );
+      const tile = createSummonCard({ kind: 'fish', id: t, rarity: FISH_RARITY[t] }, {
+        compact: true, note: card ? `Lv.${card.level} · 碎片 ${card.copies}` : '未擁有',
+        onClick: () => { this.selected = t; this.render(); },
+      });
+      tile.classList.add('collection-card');
+      tile.classList.toggle('locked', !card);
+      tile.classList.toggle('on', t === this.selected);
       // 碎片夠升級 → 提示
       if (card && checkLevelUp(p, t).ok) tile.append(el('span', 'ugc-card-up', '可升級'));
-      tile.addEventListener('click', () => {
-        this.selected = t;
-        this.render();
-      });
       this.grid.append(tile);
     }
 
     clear(this.extras);
     const scenes = el('div', 'ugc-extra-row');
     for (const s of Object.keys(SCENE_RARITY).map(Number)) {
-      const chip = sceneChip(s, p.scenes.includes(s) ? '' : 'locked');
+      const chip = createSummonCard({ kind: 'scene', id: s, rarity: SCENE_RARITY[s] }, { compact: true, note: p.scenes.includes(s) ? '已解鎖' : '未擁有' });
+      chip.classList.toggle('locked', !p.scenes.includes(s));
       scenes.append(chip);
     }
     const decos = el('div', 'ugc-extra-row');
     for (const d of DECO_DEFINES) {
       const n = p.decos[d.id] ?? 0;
-      const icon = decoIcon(d, 46);
+      const icon = createSummonCard({ kind: 'deco', id: d.id, rarity: d.rarity }, { compact: true, note: `持有 ×${n}` });
       icon.classList.toggle('locked', n === 0);
-      icon.append(el('span', 'ugc-deco-count', `×${n}`));
       decos.append(icon);
     }
     this.extras.append(
@@ -88,7 +85,7 @@ export class CardPanel {
     const limit = FISH_SCENE_LIMIT[t];
     const where = !limit ? '任何場景' : limit.every((s) => isSkyScene(s)) ? '只能放在天空場景' : '只能放在地面場景';
     this.detail.append(
-      el('div', 'ugc-detail-fish', fishIcon(this.ctx.ui, t, 110)),
+      el('div', 'ugc-detail-fish', createSummonCard({ kind: 'fish', id: t, rarity })),
       el('div', 'ugc-detail-title', fishName(t)),
       el('div', 'ugc-detail-tags', rarityTag(rarity), el('span', '', RARITY_NAME[rarity]), isBossCard(t) && el('span', 'ugc-tag-boss', 'Boss'), el('span', '', where)),
     );

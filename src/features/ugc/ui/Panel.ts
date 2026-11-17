@@ -24,6 +24,8 @@ export class Panel {
   /** 每次打開時呼叫（重新整理內容） */
   onOpen: (() => void) | null = null;
   onClose: (() => void) | null = null;
+  /** An inner detail view may consume Escape before the panel closes. */
+  onEscape: (() => boolean) | null = null;
 
   constructor(
     private readonly ui: UIRoot,
@@ -53,6 +55,7 @@ export class Panel {
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
       e.stopPropagation();
+      if (this.onEscape?.()) return;
       this.close();
     } else if (e.code === 'Space') {
       // 面板開著時空白鍵不要觸發「自動」
