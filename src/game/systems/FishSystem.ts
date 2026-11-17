@@ -11,7 +11,8 @@ import { getGroup } from '../path/PathTypes';
 import { FishTimeline, type TimelineFish, type TimelineListener } from '../timeline/FishTimeline';
 import { getFishDefine } from '../define/FishDefine';
 import type { GameContext } from '../GameContext';
-import { Fish } from '../world/Fish';
+import { Fish, type FishEnv } from '../world/Fish';
+import type { FishEfkSetting } from '../world/FishEfkPlayer';
 import { FishKilledShow } from '../show/FishKilledShow';
 
 export class FishSystem implements TimelineListener {
@@ -19,35 +20,68 @@ export class FishSystem implements TimelineListener {
   private dying = new Set<Fish>();
   private timeline: FishTimeline;
   private killedShow: FishKilledShow;
+  /** define.efk 路徑 → 魚身 EFK 設定（預載） */
+  private efkSettings = new Map<string, FishEfkSetting>();
+  private readonly env: FishEnv;
   shadowColor: [number, number, number] = [0.145, 0.145, 0.337];
+  /** 天空場景關閉陰影 */
+  shadowVisible = true;
 
   constructor(private readonly ctx: GameContext) {
     this.timeline = new FishTimeline(this);
     this.killedShow = new FishKilledShow(ctx.actions);
+    const { assets } = ctx;
+    this.env = {
+      efk: ctx.efk,
+      playSound: (name) => void ctx.audio.play(name),
+      shake: (times, delta) => ctx.events.emit('camera:shake', { times, delta }),
+      peekTexture: (path) => assets.peek<THREE.Texture>(`tex:${assets.url(path)}`) ?? null,
+      aliveFish: () => this.alive.values(),
+    };
   }
 
   init(): void {
     this.ctx.net.on('G2U_SYNC_SCRIPT_ACK', (d) => this.applySync(d, false));
     this.ctx.net.on('G2U_ADD_GROUP_SYNC_NOTIFY', (d) => this.applySync(d, true));
+    // 原版 TimelineSystem:RECV_G2U_CHANGE_SCENE_NOTIFY → ForceEnd：換場景一律清場
+    this.ctx.net.on('G2U_CHANGE_SCENE_NOTIFY', () => this.clearAll());
   }
 
-  /** 預載所有支援魚種的模型（生魚時可同步建立） */
+  /** 清場：所有群組結束、場上的魚直接移除（不播死亡表演；死亡表演中的照常播完） */
+  clearAll(): void {
+    this.timeline.clear();
+  }
+
+  /** 預載所有支援魚種的模型、貼圖、魚身 EFK 設定與其 efk 檔（生魚時可同步建立） */
   async preload(types: number[]): Promise<void> {
     const paths = new Set<string>();
+    const efkJsons = new Set<string>();
     for (const t of types) {
       const d = getFishDefine(t);
       if (!d) continue;
-      paths.add(d.model.model);
+      if (!d.model.virtual) paths.add(d.model.model);
       if (d.model.texture) paths.add(d.model.texture);
       d.model.pluginNodes?.forEach((p) => paths.add(p.model));
+      d.extraTextures?.forEach((p) => paths.add(p));
+      if (d.efk) efkJsons.add(d.efk);
     }
-    await Promise.all(
-      [...paths].map((p) =>
-        (p.endsWith('.c3b') ? this.ctx.assets.model(p) : this.ctx.assets.texture(p)).catch((e) =>
+    const { assets, efk } = this.ctx;
+    await Promise.all([
+      ...[...paths].map((p) =>
+        (p.endsWith('.c3b') ? assets.model(p) : assets.texture(p)).catch((e) =>
           console.error('[FishSystem] preload failed', p, e),
         ),
       ),
-    );
+      ...[...efkJsons].map(async (p) => {
+        try {
+          const setting = await assets.json<FishEfkSetting>(p);
+          this.efkSettings.set(p, setting);
+          await Promise.all(listEfkFiles(setting).map((f) => efk.load(f).catch(() => undefined)));
+        } catch (e) {
+          console.error('[FishSystem] fish efk setting failed', p, e);
+        }
+      }),
+    ]);
   }
 
   private applySync(d: ScriptSyncData, fromScratch: boolean): void {
@@ -72,8 +106,8 @@ export class FishSystem implements TimelineListener {
       return;
     }
     const { assets } = this.ctx;
-    const tpl = assets.peekModel(define.model.model);
-    if (!tpl) {
+    const tpl = define.model.virtual ? null : (assets.peekModel(define.model.model) ?? null);
+    if (!tpl && !define.model.virtual) {
       // 尚未載入：載完後以當下群組時間補生
       void assets.model(define.model.model).then(() => {
         const sub = this.timeline.get(info.groupIndex);
@@ -96,6 +130,8 @@ export class FishSystem implements TimelineListener {
         shadowColor: this.shadowColor,
         elapsed,
         fromScratch,
+        env: this.env,
+        efk: define.efk ? (this.efkSettings.get(define.efk) ?? null) : null,
       });
       fish.hooks.onBossComing = (f) => console.info(`[FishSystem] boss coming: ${f.define.name}`);
       fish.start();
@@ -104,26 +140,52 @@ export class FishSystem implements TimelineListener {
       console.error(`[FishSystem] create fish type ${info.fishType} failed`, err);
       return;
     }
+    if (!this.shadowVisible) fish.shadowVisible = false;
     this.alive.get(fish.serial)?.destroy();
     this.alive.set(fish.serial, fish);
     this.ctx.layers.fish.add(fish.node);
     this.ctx.events.emit('fish:spawn', { fish });
   }
 
+  /** 換場景：之後出生的魚與場上的魚都換成新陰影色（原版 ModelMgr:setShadowColor） */
+  setShadowColor(c: [number, number, number]): void {
+    this.shadowColor = c;
+    for (const fish of this.alive.values()) fish.shadowColor = c;
+  }
+
+  /** 換場景：天空場景關閉陰影（原版 FishBase:update → SetShadowDisable(GetSceneInSky())） */
+  setShadowVisible(v: boolean): void {
+    this.shadowVisible = v;
+    for (const fish of this.alive.values()) fish.shadowVisible = v;
+    for (const fish of this.dying) fish.shadowVisible = v;
+  }
+
   onDelFish(serial: number): void {
     const fish = this.alive.get(serial);
     if (!fish) return;
-    this.alive.delete(serial);
-    fish.destroy();
-    this.ctx.events.emit('fish:remove', { serial });
+    this.remove(fish);
   }
 
   onGroupEnd(groupIndex: number): void {
-    for (const [serial, fish] of this.alive) {
-      if (fish.groupIndex !== groupIndex) continue;
-      this.alive.delete(serial);
-      fish.destroy();
-      this.ctx.events.emit('fish:remove', { serial });
+    for (const fish of [...this.alive.values()]) {
+      if (fish.groupIndex === groupIndex) this.remove(fish);
+    }
+  }
+
+  /** 直接移除（離場，不播死亡表演）；掛在牠身上的魚一起移除 */
+  private remove(fish: Fish): void {
+    if (!this.alive.delete(fish.serial)) return;
+    fish.destroy();
+    this.ctx.events.emit('fish:remove', { serial: fish.serial });
+    this.removeAttached(fish);
+  }
+
+  /** 父魚離場 / 死亡 → 掛在牠身上的魚（蒼龍翅膀）一起移除（原版 DestroyByEvent） */
+  private removeAttached(parent: Fish): void {
+    for (const f of [...this.alive.values()]) {
+      if (f.attachedTo !== parent) continue;
+      this.timeline.markDead(f.groupIndex, f.fishIndex);
+      this.remove(f);
     }
   }
 
@@ -148,8 +210,10 @@ export class FishSystem implements TimelineListener {
     if (!this.alive.has(fish.serial)) return;
     this.alive.delete(fish.serial);
     this.timeline.markDead(fish.groupIndex, fish.fishIndex);
+    fish.onKilled();
     this.dying.add(fish);
     this.ctx.events.emit('fish:remove', { serial: fish.serial });
+    this.removeAttached(fish);
     this.killedShow.play(fish, () => {
       this.dying.delete(fish);
       fish.destroy();
@@ -173,4 +237,13 @@ export class FishSystem implements TimelineListener {
   get groupCount(): number {
     return this.timeline.groupCount;
   }
+}
+
+/** 魚身 EFK 設定內引用的所有 efk 檔（預載用） */
+export function listEfkFiles(setting: FishEfkSetting): string[] {
+  const files = new Set<string>();
+  const visit = (entries?: { efk?: { file: string } }[]) => entries?.forEach((e) => e.efk && files.add(e.efk.file));
+  visit(setting.bodyEfk);
+  for (const group of [setting.withActEfk, setting.other]) if (group) Object.values(group).forEach(visit);
+  return [...files];
 }

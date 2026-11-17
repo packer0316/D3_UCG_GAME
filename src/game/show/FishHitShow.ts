@@ -75,7 +75,9 @@ export class FishHitShow {
 
   private shake(fish: Fish): void {
     if (this.actions.hasTag(fish, TAG_SHAKE)) return;
-    const def = HIT_SHAKE_DEFINE[fish.define.common.hitShake];
+    // 沒設定 HitShakeNormalType（獵龍騎士、蒼龍翅膀）→ 不晃動
+    const type = fish.define.common.hitShake;
+    const def = type !== undefined ? HIT_SHAKE_DEFINE[type] : undefined;
     if (!def) return;
     const s = fish.sprite;
     const d3 = def.duration / 3;

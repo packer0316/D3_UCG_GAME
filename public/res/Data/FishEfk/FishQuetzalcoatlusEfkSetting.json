@@ -1,0 +1,73 @@
+{
+ "bodyEfk": [
+  {
+   "efk": {
+    "file": "Effekseer_dt3/Boss_Quetzalcoatlus/smoke.efk",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "rotation": {
+     "x": 0,
+     "y": 0,
+     "z": 0
+    },
+    "scale": 10,
+    "speed": 0.07,
+    "duration": -1
+   },
+   "bone": "root"
+  }
+ ],
+ "withActEfk": {
+  "InGame": [
+   {
+    "sound": {
+     "source": "sound/dragon_yell",
+     "delay": 1.5
+    }
+   }
+  ],
+  "Idle_1": [
+   {
+    "sound": {
+     "source": "sound/F_1",
+     "delay": 0
+    }
+   },
+   {
+    "sound": {
+     "source": "sound/F_1",
+     "delay": 1.45
+    }
+   },
+   {
+    "sound": {
+     "source": "sound/F_1",
+     "delay": 2.9
+    }
+   }
+  ],
+  "Idle_2": [
+   {
+    "sound": {
+     "source": "sound/dragon_yell",
+     "delay": 0.73
+    }
+   },
+   {
+    "sound": {
+     "source": "sound/F_1",
+     "delay": 0
+    }
+   },
+   {
+    "sound": {
+     "source": "sound/F_1",
+     "delay": 1.6
+    }
+   }
+  ]
+ }
+}

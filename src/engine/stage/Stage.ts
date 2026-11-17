@@ -73,9 +73,7 @@ export class Stage {
 
     const c = opts.camera;
     this.camera = new THREE.PerspectiveCamera(c.fov, 1, c.near, c.far);
-    this.camera.position.set(c.position.x, c.position.y, c.position.z);
-    setCocosRotation(this.camera, c.rotation);
-    this.cameraHome.copy(this.camera.position);
+    this.setCamera(c);
 
     this.overlayCamera = new THREE.OrthographicCamera(0, 1, this.designHeight, 0, -1000, 1000);
 
@@ -101,6 +99,26 @@ export class Stage {
 
   get canvas(): HTMLCanvasElement {
     return this.renderer.domElement;
+  }
+
+  /**
+   * 執行中切換相機（debug 相機預設）。投影改變後走 resize 通知，
+   * 讓依投影擺放的東西（砲台 = 座位錨點投到地面）重新定位。
+   */
+  applyCamera(c: CameraSetting): void {
+    this.setCamera(c);
+    this.resize();
+  }
+
+  /** fov / 位置 / 角度；震動回復點一起更新 */
+  private setCamera(c: CameraSetting): void {
+    this.camera.fov = c.fov;
+    this.camera.near = c.near;
+    this.camera.far = c.far;
+    this.camera.position.set(c.position.x, c.position.y, c.position.z);
+    setCocosRotation(this.camera, c.rotation);
+    this.cameraHome.copy(this.camera.position);
+    this.camera.updateProjectionMatrix();
   }
 
   addPass(pass: RenderPass): void {

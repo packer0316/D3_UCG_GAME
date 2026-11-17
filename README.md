@@ -6,7 +6,7 @@
 
 ```bash
 npm install
-npm run assets   # 從原版複製資源到 public/res（D3_SRC = 原版資源、D3_CSD_SRC = Cocos Studio 專案，皆有預設路徑）
+npm run assets   # 從原版複製資源到 public/res（D3_SRC = 原版資源、D3_CSD_SRC = Cocos Studio 專案、D3_LUA_SRC = 原版 Lua，皆有預設路徑）
 npm run dev      # http://localhost:5173
 ```
 
@@ -15,7 +15,7 @@ npm run dev      # http://localhost:5173
 | `npm run dev` | 開發伺服器 |
 | `npm run build` | 型別檢查 + 打包到 `dist/` |
 | `npm test` | Vitest（路徑翻譯、群組時間軸、RTP 收斂） |
-| `npm run assets` | 依 `tools/asset-manifest.mjs` 複製原版資源（自動追 c3b / efk / fnt / plist 相依） |
+| `npm run assets` | 依 `tools/asset-manifest.mjs` 複製原版資源（自動追 c3b / efk / fnt / plist 相依；`lua-efk:` 項目把原版魚身 EFK 設定 Lua 轉成 `Data/FishEfk/*.json`） |
 | `npm run inspect:c3b -- <file.c3b> [--bones] [--anim]` | 檢視 c3b 結構 |
 | `node tools/inspect-csd.mjs <file.csd> [--timelines]` | 檢視 Cocos Studio csd 節點樹 / timeline |
 
@@ -41,12 +41,20 @@ npm run dev      # http://localhost:5173
   - **出獎模式**：顯示目前狀態，開啟後每次命中必中獎
   - **召喚魚**：篩選 + 列表（原版 GroupIdMap + 本版支援的群組），點一下立即出現
 
+## 魚種
+
+目前支援 1–17、22–28（SPEC §5.2、§14）：一般魚 1–14、特色魚 15–17、獵龍騎士 22、
+Boss 樹精哥布林 23 / 帝王暴龍 24 / 遠古巨蠍 25 / 風神翼龍 26 / 翔空蒼龍 27（+ 翅膀 28）。
+Boss 大獎演出（BossShow / Overlay）與特色魚大招尚未實作，一律降級為「獎圈 + 死亡」。
+
 ## 加新魚
 
 1. `src/game/define/FishDefine.ts` 加一筆（照原版 `FishDefine.lua` 翻譯）
-2. `tools/asset-manifest.mjs` 加模型，執行 `npm run assets`
+2. `tools/asset-manifest.mjs` 加模型；有魚身 EFK 就在 `fishEfk` 加 `lua-efk:<原版 EfkSetting.lua>|<會播到的動畫>`，
+   並在 define 設 `efk: 'Data/FishEfk/<檔名>.json'`；執行 `npm run assets`
 3. `src/server-fake/config/payoutConfig.ts` 加賠付、`scheduleConfig.ts` 的 `SUPPORTED_FISH_TYPES` 加魚種
-4. 有特殊行為（WaitAction 等）就寫 Fish 子類別並在 `GameApp` 用 `registries.fishClass.register()` 註冊
+4. 有特殊行為（WaitAction 等）就在 `src/game/world/fishes/` 寫 Fish 子類別（覆寫 `onInit` / `playAnims`，對照原版 Init / PlayAnims），
+   並在 `fishes/index.ts` 的 `registerFishClasses` 註冊
 
 ## 加新功能（例如抽卡）
 

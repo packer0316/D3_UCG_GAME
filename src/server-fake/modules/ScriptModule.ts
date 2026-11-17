@@ -1,9 +1,11 @@
 /**
  * 魚群腳本排程（server 端）：決定何時出哪個群組，追蹤每隻魚的存活窗與死亡名單。
  * 對 client 送 106 SYNC_SCRIPT_ACK（進房同步）與 107 ADD_GROUP_SYNC_NOTIFY（新群組）。
+ * 場景限定魚種：挑群組 / debug 召喚時依 RoomModule.sceneType 過濾（SPEC §15.4）；換場景時清掉所有群組重新排程。
  */
 import type { GroupSyncData, ScriptIdData } from '@net/protocol';
 import { getGroup, listGroupIds, type GroupEntry } from '@game/path/PathTypes';
+import { isGroupAllowedInScene } from '@game/define/SceneDefine';
 import type { FakeServer, FakeServerModule } from '../FakeServer';
 import { BACKFILL_SHIFT_MS, SCHEDULE, SUPPORTED_FISH_TYPES, type ScheduleKind } from '../config/scheduleConfig';
 
@@ -30,6 +32,8 @@ export class ScriptModule implements FakeServerModule {
   private groups = new Map<number, ActiveGroup>();
   private kinds: KindState[] = [];
   private started = false;
+  /** groupId → 群組內魚種（場景限制用） */
+  private groupTypes = new Map<number, Set<number>>();
 
   install(server: FakeServer): void {
     this.server = server;
@@ -56,6 +60,23 @@ export class ScriptModule implements FakeServerModule {
     });
   }
 
+  private typesOf(groupId: number): Set<number> | null {
+    let types = this.groupTypes.get(groupId);
+    if (!types) {
+      const entries = getGroup(this.server.data.groups, groupId);
+      if (!entries) return null;
+      types = new Set(entries.map((e) => e.fish + 1));
+      this.groupTypes.set(groupId, types);
+    }
+    return types;
+  }
+
+  /** 群組可在目前場景出現 */
+  private allowedInScene(groupId: number): boolean {
+    const types = this.typesOf(groupId);
+    return !!types && isGroupAllowedInScene(types, this.server.room.sceneType);
+  }
+
   /** 開場：每個 kind 依偏移回填，模擬進房時已有魚 */
   private startScene(): void {
     this.started = true;
@@ -77,9 +98,12 @@ export class ScriptModule implements FakeServerModule {
     }
   }
 
+  /** 依權重挑一個目前場景可出現的群組；沒有 → -1 */
   private pickGroup(k: KindState): number {
+    const list = k.candidates.filter((id) => this.allowedInScene(id));
+    if (list.length === 0) return -1;
     const w = k.def.weight;
-    return w ? this.server.rng.weighted(k.candidates, w) : this.server.rng.pick(k.candidates);
+    return w ? this.server.rng.weighted(list, w) : this.server.rng.pick(list);
   }
 
   private freeIndex(): number {
@@ -112,9 +136,21 @@ export class ScriptModule implements FakeServerModule {
     return g;
   }
 
-  /** debug：立即加入指定群組 */
+  /** debug：立即加入指定群組（不在允許場景 → false） */
   spawnGroup(groupId: number): boolean {
+    if (!this.allowedInScene(groupId)) return false;
     return this.addGroup(null, this.server.now(), true, groupId) !== null;
+  }
+
+  /**
+   * 換場景（client 收到 G2U_CHANGE_SCENE_NOTIFY 會清場）：清掉所有群組，
+   * 各排程從頭計時（next = now + firstDelayMs），不回填
+   */
+  resetScene(): void {
+    this.groups.clear();
+    if (!this.started) return;
+    const now = this.server.now();
+    for (const k of this.kinds) k.next = now + (k.def.firstDelayMs ?? 0);
   }
 
   private countKind(kind: string): number {

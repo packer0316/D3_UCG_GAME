@@ -28,7 +28,7 @@
 
 - BossShow 全部（`BossShowLayer` 系列）→ 依 §7.2 **降級為小獎**
 - 特殊子彈（Grenade / Plasma / Laser）、鎖定射擊、道具掉落（`Reward_Item`）、HitMore、Overlay 大獎
-- 換場景 / 轉場（Iris / Cloud）、天空場景
+- 換場景 / 轉場（Iris / Cloud）、天空場景（→ §15 已加入：debug 換場景、Iris、空中(黃昏)；雲層轉場仍未做）
 - 真實 Server、帳號、多人同步（其他座位顯示「等待加入」）
 - **抽卡（Gacha）** → 下一階段，以 Feature 外掛方式加入（§10）
 
@@ -89,6 +89,7 @@ D3_UCG_GAME/
 ├─ tools/                   開發工具（Node 腳本，不進 bundle）
 │  ├─ copy-assets.mjs       依 manifest 從原版複製資源；追 efk/efkmat/c3b 相依貼圖；plist→json
 │  ├─ asset-manifest.mjs    要複製的資源清單
+│  ├─ lib/lua-table.mjs     Lua table literal 解析（原版 *EfkSetting.lua → JSON，§14.2）
 │  └─ inspect-c3b.mjs       c3b 結構 dump（除錯用）
 ├─ public/
 │  ├─ lib/effekseer/        effekseer.min.js + effekseer.wasm
@@ -107,7 +108,7 @@ D3_UCG_GAME/
 │  │  ├─ stage/             Stage（renderer、相機、RenderPass、設計座標換算）
 │  │  ├─ loaders/           C3bParser（純資料）、C3bLoader（→ three）、FntLoader
 │  │  ├─ assets/            AssetManager（路徑、快取、atlas、字型、預載）
-│  │  ├─ csd/               Cocos Studio 執行環境：CsdParser（XML→JSON，工具共用）、CsdPlayer（節點 + timeline）
+│  │  ├─ csd/               Cocos Studio 執行環境：CsdParser（XML→JSON）、CsbParser（FlatBuffers→JSON），工具共用；CsdPlayer（節點 + timeline）
 │  │  ├─ input/             PointerRouter（UI 按鈕優先、其餘交給射擊）
 │  │  ├─ effekseer/         EfkSystem（runtime 載入、播放、跟隨節點、併發上限）
 │  │  ├─ materials/         FishMaterial、ShadowMaterial、CannonMaterial
@@ -132,7 +133,9 @@ D3_UCG_GAME/
 │  │  ├─ systems/           SeatSystem、FishSystem、ShootingSystem、RewardSystem（+ SmallWinShow）、
 │  │  │                     SkillSystem（按鈕狀態 / 互斥 / 子彈類型）、LockSystem（鎖定目標、準心）
 │  │  ├─ bullet/            子彈行為（BulletBehaviorRegistry）：NormalBullet、TrackBullet、LightningBullet、LaserShot
-│  │  ├─ world/             BGScene、Fish、TRexFish、FishClassRegistry、Cannon（多外觀）、CameraShake
+│  │  ├─ world/             BGScene、Fish、FishEfkPlayer、FishClassRegistry、Cannon（多外觀）、CameraShake
+│  │  │  └─ fishes/         各魚類別（對照原版 FishClassType）：TRex、TreeGoblin、Scorpion、Quetzalcoatlus、
+│  │  │                     AzureDragon、AzureDragonWing、DragonSlainKnight（§14.4）
 │  │  └─ show/              KillShowRegistry、FishHitShow、FishKilledShow、JumpNumber、
 │  │                        WinCircle、WinCircleManager、CoinSpray、BulletHitFx、Tweens
 │  ├─ ui/                   DOM HUD：UIRoot（設計座標圖層）、Hud（座位面板、房間）；
@@ -431,9 +434,10 @@ SmallWinShow(content):
 | Middle | `Reward_Middle.png` | 魚 9–11 |
 | Big | `Reward_Big01.png` + `reward_big1.png` + 倍數字 `5/10/100TimesReward_word.png` | 魚 12–14、BOSSSHOW 降級 |
 
-- 組成：光暈 `SunLight`/`Light_reward` + 外框 + 頭像 `D3_xx.png`（Reward_common_D3_1）+ 數字 `d3_num_jp01.fnt` + 星星 `star_B.png`。
-- 位置：**本人座位錨點**（不在魚身上），整體 scale 0.8；同座位最多 6 個，槽位偏移 `(0,0) (-120,-30) (120,-30) (0,90) (-120,60) (120,60)`。
-- 動畫（原 csb timeline，60fps）：`start` 0.75s（外框 0.36→1.1/1.23→1.09/0.75→1.29 彈跳；頭像 0.3→1.3 旋轉 -21→0；數字 0.47→0.9→0.75）→ 停留 → 該座位最後一個獎圈出現 **1.5s 後**全部 `end`（0.33s 縮小消失）。
+- **直接播原版 csb**：`DinosaurExport/reward/Reward_Min_0 / Reward_Middle_0 / Reward_Big_0.csb`，由 `CsbParser` 轉成 json、`CsdPlayer` 播放（§13.6），節點、圖片、光暈、星星、粒子、爆光子動畫（`ExplosionNode` → `main/Death_Explosion_big_Anim.csb`）都與原版一致。
+- 程式只做原版 `WinCircleCommon:show` 做的事：`img` 換成魚頭像 `D3_xx.png`、`num` 設金額、`MegaAward` / `MegaAward_light` 換倍數字並顯示（沒有暴獎則隱藏）、別人的獎圈 opacity 150、`ExplosionNode` 從頭播一次後隱藏。
+- 位置：**本人座位錨點**（不在魚身上），整體 scale 0.8（別人 0.6）；同座位最多 6 個，槽位偏移 `(0,0) (-120,-30) (120,-30) (0,90) (-120,60) (120,60)`。
+- 動畫（60fps）：`start`（0–45）播完停在最後一格（原版不播 `loop`）→ 該座位最後一個獎圈出現 **1.5s 後**全部播 `end`（115–135）後移除；沒有 `end` 的才 ScaleTo(0.3, 0)。
 - 數字**不滾動**，直接設值（原版即如此）。
 - 音效：Small/Middle/Big → `C_1/C_2/C_3`；Big 時相機震動 3 次、0.8。
 
@@ -513,6 +517,8 @@ interface GameFeature {
 | M3 | 砲台、瞄準、子彈、反彈、碰撞、EFK | 可射擊、子彈反彈、砲口 / 冷卻特效 | ✅ |
 | M4 | RTP、受擊、死亡、跳字、獎圈、噴錢、BOSSSHOW 降級 | 完整擊殺流程；RTP 模擬 110% ± 1.5% | ✅ |
 | M5 | HUD、自動、音效、debug 面板 | 畫面接近附圖 | ✅ |
+| M6 | 魚種 15–17、22–28 + 魚身 EFK（§14） | 召喚每個群組都能正常走完路徑、可打、可擊殺 | ✅ |
+| M7 | debug 場景下拉選單、空中(黃昏) 場景、場景限定魚種（§15） | 天空 flowmap 流動、轉場雙向正常；風神 / 蒼龍只在空中(黃昏) 出現與召喚 | ✅ |
 
 ---
 
@@ -521,7 +527,7 @@ interface GameFeature {
 | 項目 | 說明 |
 |---|---|
 | 原版排程演算法缺失 | `CasinoFishBase` 不在 repo，群組排程為自訂（`server-fake/config/scheduleConfig.ts`） |
-| csb 動畫 | three 無法讀 csb；獎圈 / 命中特效依 timeline 關鍵影格以 Tween 重做，版面為近似值 |
+| csb 動畫 | ~~three 無法讀 csb~~ → 已支援 csb（§13.6），獎圈改播原版 csb。命中特效 `Fire_Normal_Hit` 仍是序列幀重做 |
 | 獎圈錨點 | 原版 SeatInfo `WinCircleAP` 座標未取得，暫定座位錨點上方 190（`WIN_CIRCLE_ANCHOR_OFFSET_Y`） |
 | 魚碰撞盒大小 | 原版用 `Sprite3D` contentSize（引擎原始碼查不到賦值處）；此版用「模型在地面 XY 的範圍 × ColliderScale」，需要時微調 |
 | 飛行魚 | 原版一般子彈不打飛行魚（需鎖定彈）。本階段沒有鎖定彈，改為可打，且碰撞中心取「模型中心沿視線投到地面」（`NORMAL_BULLET_HITS_FLYING`） |
@@ -597,6 +603,10 @@ interface GameFeature {
 ### 13.6 CSD 執行環境（`src/engine/csd/`）
 
 - `tools/copy-assets.mjs` 把 Cocos Studio 原始檔 `.csd`（XML，位於 `TMD_CocosStudio_DragonTycoon3/CocosProject/cocosstudio`）轉成 `.csd.json`，放在與 `.csb` 相同的路徑，並自動複製相依的 plist、字型、子 csd。
+- **只有編譯後 `.csb` 的檔案**（例如獎圈）：manifest 寫 `csb:<路徑>`，由 `CsbParser`（FlatBuffers，schema = 引擎 `CSParseBinary.fbs`）轉成同格式的 `<路徑>.csb.json`；巢狀 ProjectNode 引用的 `.csb` 一併轉換。
+  - 欄位以 **Cocos Studio 編輯器輸出版本（csb 2.1.0.0）** 為準：`TextOptions` / `ButtonOptions` 沒有引擎後來加的 `isLocalized`。
+  - 驗證：原版 77 組「同一份 UI 的 csd + csb」中 64 組解析結果完全相同；其餘 13 組是 csb 比 csd 舊（後來改過 csd 沒重新發佈）或不影響播放的差異（非補間 key 的 easing 值）。
+  - csb 的 ImageView 九宮格只存 capInsets 矩形，不輸出 `scale9Caps`（播放器也沒用到）；根節點 `GameLayer` 在 csb 內已被轉成 `Node`（引擎 FlatBuffersSerialize 行為）。
 - 支援節點：SingleNode、Sprite、ImageView、TextBMFont、ProjectNode（巢狀 csd）、Panel、Button；Particle 以旋轉光暈近似。
 - Timeline：Position、Scale、RotationSkew、Alpha、VisibleForFrame、FileData、BlendFunc、CColor、AnchorPoint、FrameEvent；`Tween=False` 為階梯；EasingData 對照 cocos tweenfunc；第一個 key 之前取第一個 key、最後一個之後取最後一個（cocostudio Timeline 行為）。
 - 60 fps；依 `AnimationList` 名稱播放、可 loop；opacity / color 向子節點層疊（CSLoader 預設）；子節點座標原點 = 父節點左下角。
@@ -664,3 +674,192 @@ interface GameFeature {
 - 切換子彈類型時，全場「賠率 < 限制賠率」的魚設為不可選取（榴彈砲 < 6、巡光炮 < 16），新生成的魚也依目前限制設定。
 - 不可選取：不透明度 **70 / 255**（魚身與陰影一起，外掛節點 Boss_Mark 不變）；不能被點選或自動鎖定。切回其他砲種時恢復 255。
 - 死亡表演中的魚不受影響。實作：`LockSystem.limitOdds`（setter 套用全場）、`Fish.setUnSelectable`。
+
+---
+
+## 14. 第三階段：補齊魚種 15–17、22–28
+
+> 來源：原版 `Define/FishDefine.lua`（ModelSetting / RewardSetting / CommonSetting / KillShowSetting / EfkSetting）、
+> `Define/FishDefine_Extra.lua`（FishClassType）、`View/GameView/Fish/<各魚>/`、TMDCommon `Sprite3DBase.lua`
+
+### 14.1 範圍
+
+| # | 名稱 | 類別（原版 → 本版） | 模型 | scale | 其他 |
+|---|---|---|---|---|---|
+| 15 | 鐮刀龍 | FishTherizinosaurus → normal | `Dinosaur_dt3/2_Special/Sp_SickleClaw.c3b` | 0.0198 | Run 0–60 |
+| 16 | 腫頭龍 | FishPachycephalosaurus → normal | `2_Special/Sp_ThickHead.c3b` | 0.198 | Run 0–30 |
+| 17 | 火盜龍 | FishPyroraptor → normal | `2_Special/Sp_FireFeather.c3b` | 0.198 | Run 0–60 |
+| 22 | 獵龍騎士 | FishDragonSlainKnight → `knight` | `3_SpBoss/Sp_DragonHunter.c3b` | 0.352 | 飛行；Run 0–50 |
+| 23 | 樹精哥布林 | FishTreeGoblin → `treeGoblin` | `1_Boss/dt3_boss_004/dt3_boss_004.c3b` | 0.22 | RunAnimation = Run / Run2（速度 0.5） |
+| 24 | 帝王暴龍 | FishTRex → `trex`（已有） | `dt3_boss_005` | 0.2376 | 本階段補上 EFK |
+| 25 | 遠古巨蠍 | FishScorpion → `scorpion` | `1_Boss/dt3_boss_003/dt3_boss_003.c3b` | 0.2816 | Run 60–128（0.5） |
+| 26 | 風神翼龍 | FishQuetzalcoatlus → `quetzalcoatlus` | `1_Boss/dt3_boss_002/dt3_boss_002.c3b`，rot (75,0,180) | 0.44 | RunAnimation = Idle_1 ×3 / Idle_2；身上常駐煙霧 EFK |
+| 27 | 翔空蒼龍 | FishAzureDragon → `azureDragon` | `1_Boss/dt3_boss_AzureDragon/dt3_boss_001.c3b` | 0.44 | RunAnimation = Idle_1/2/3/1/1 |
+| 28 | 蒼龍翅膀 | FishAzureDragonWing → `azureDragonWing` | 無模型（原版 `empty.c3t` 單位方塊、不顯示） | 8.8 | 掛在蒼龍骨骼上（§14.5） |
+
+- 設定值（HitBox、ColliderScale、Animation、WaitAction、HitShake、獎圈頭像 `D3_<type>.png`、WinCircleSetting）逐字翻譯自原版，見 `game/define/FishDefine.ts`。
+- 群組：15 → 27/28、16 → 29/30、17 → 31/32、22 → 46/47/54/55/56/125、23 → 33/34、24 → 35、25 → 36、26 → 37/58、27+28 → 57/66（蒼龍 fishIndex 0、翅膀 1–6）。
+
+### 14.2 魚身 EFK（原版 `FishSpriteBase` 的 `BodyEfk` / `WithActEfk`）
+
+- **轉檔**：`tools/lib/lua-table.mjs` 解析原版 `*EfkSetting.lua`（Lua table literal；支援 `cc.vec3`、`fishG.Res_Path .. "…"`、`fishG.SoundTable.X`），輸出 `public/res/Data/FishEfk/<檔名>.json`。
+  manifest 用 `lua-efk:<相對 DragonTycoon3Lua 的路徑>` 列出；`copy-assets` 同時複製 JSON 內引用的 `.efk`（含相依）與音效（`SoundTable` 以 `Define/SoundDefine.lua` 解析成 `Sound/mp3/<name>.mp3`）。
+- JSON 格式（欄位改小寫駝峰）：
+  ```
+  { bodyEfk?: Entry[], withActEfk?: { [anim]: Entry[] } }
+  Entry = { efk?: { file, position?, rotation?, scale?, speed?, duration?, delay? }, bone?: string,
+            sound?: { source, delay?, duration? }, shockWorld?: { times, delta } }
+  ```
+- 執行（`FishEfkPlayer`）：
+  - 生成時播 `bodyEfk`（`duration = -1` 常駐）。
+  - 每次播放動畫 key（含 loop 的每一輪，原版 `RepeatForever(Spawn(anim, efk, shock, sound))`）播 `withActEfk[key]`：EFK 掛在 `bone`（找不到 → 掛在 sprite），音效在 `efk.delay + sound.delay` 後播，震動在 `efk.delay` 後送 `camera:shake`。
+  - 魚隱藏時（Reset）EFK 一起隱藏；魚回收時全部停止（原版 `ClearLoopBodyEfk` / `ClearEfkCache`）。
+- 用到的 key 以外（BigWin_*、HitMore 用的 Attack 等）照樣轉出 JSON，但只有實際播到的動畫才會觸發。
+
+### 14.3 動畫語意修正（對照 TMDCommon `Sprite3DBase`）
+
+- 速度：`speed = Animation[key].Speed ?? 參數 speed`（設定值優先，不是相乘）。
+- `PlayRunAnimation`：只有 1 個 → loop；多個 → 隨機挑一個**播一次**，播完再隨機挑（TRex Walk_1/Walk_2、風神翼龍 Idle_1×3/Idle_2）。
+- `playAnim(name, loop, speed, onEnd)`：非 loop 播完呼叫 `onEnd`。
+
+### 14.4 各類別行為（WaitAction 觸發的動畫）
+
+| 類別 | 建立時 | Reset | InGameShow | InGame | Declare | 其他 |
+|---|---|---|---|---|---|---|
+| trex | 隱藏、不可打 | 隱藏 | Boss 來襲事件 | 顯示，播一次 | 走路循環、可打 | |
+| treeGoblin | 隱藏（可打） | 隱藏 | – | 顯示、Boss 來襲、播一次後走路循環 | – | 所有動畫速度 0.5（原版 PlayAnims 固定傳 0.5，設定值仍優先） |
+| scorpion | 隱藏、不可打 | 隱藏 | – | 顯示，播一次 | 走路循環 + Boss 來襲 | 播到 RunAnimation 時可打；速度 0.5 |
+| quetzalcoatlus | 同 scorpion | 隱藏 | – | 顯示，播一次 | 同 scorpion | Act_Leave → `Out_Normal`；速度 0.5 |
+| azureDragon | 隱藏、不可打 | 隱藏 | Boss 來襲 | 顯示，播一次 | 走路循環、可打（翅膀一起） | Act_Back → `Back` 播一次後可打；Act_Leave → `Out` 播一次、不可打（翅膀一起）、解除鎖定 |
+| knight | 隱藏 | 隱藏 | – | 播一次後走路循環 | – | `Wait` → 顯示；`Run` 也是播一次後循環；不受限制賠率半透明（原版 SetUnSelectable 空實作） |
+
+### 14.5 翔空蒼龍 + 翅膀
+
+- 翅膀（type 28）不走路徑（原版 `InitPathMoveBehaviour` 回傳 nil）；生成後找場上的蒼龍，掛在骨骼上、節點縮放 50：
+  `fishIndex 1→Feather_Bone042、2→Feather_Bone033、3→Feather_Bone047、4→Feather_Bone042(mirrored)、5→Feather_Bone033(mirrored)、6→Feather_Bone047(mirrored)`。
+  本版不重設父節點，而是每幀把翅膀節點的世界 transform 設成「骨骼世界矩陣 × 縮放 50」，因此碰撞 / 點選 / 鎖定 / 跳字都沿用一般魚的流程。
+- 翅膀對應的 mesh：1→wing1、2→wing3、3→wing5、4→wing2、5→wing4、6→wing6（原版 meshIdx 1/0/2/5/6/7）。翅膀存在時該 mesh 換成發光貼圖 `shader/dt3_boss_001_wing_d_emissive.jpg`，被打掉換回 `dt3_boss_001_wing_d.jpg`。
+- 翅膀可打 = 蒼龍可打（`SetShootable` 同步）。
+- 打掉翅膀（翅膀的 KILL）：翅膀小獎（Middle 獎圈）→ 翅膀移除 → 蒼龍播 `Hurt` + `Hurt<n>` 羽毛 EFK；剩餘翅膀數為偶數且不是 6 → 播 `Stage_Change`（一次）。
+- 蒼龍死亡（降級為小獎死亡）時，剩下的翅膀一起移除（原版 OnOverLayNotify → DestroyByEvent）。
+- 未做：身體呼吸光 / 翅膀刷光 shader（`normal_umbrellaLizard`、`azureDragonWing`）。
+
+### 14.6 擊殺 / 假 server 賠付
+
+依原版 WinCircleSetting；本版沒有 BossShow / Overlay / HitMore，大獎一律降級為「Big 獎圈 + 死亡」（§7.2）。
+
+| # | outcomes（showType：結果） |
+|---|---|
+| 15–17 | 1：無獎圈、死亡（70%）；2：Big 獎圈、死亡（30%，原版 HitMore 大招 → 降級） |
+| 22 獵龍騎士 | 1：無獎圈、**不死**（odds 50），並播 `Attack`（原版 OnKillOccupyNtf） |
+| 23 / 25 / 26 | 1：無獎圈、不死（odds 30，90%）；3：Big、死亡（odds 300，10%） |
+| 27 翔空蒼龍 | 1：無獎圈、不死、播 `Hurt`（odds 30，90%）；3：Big、死亡（odds 300，10%） |
+| 28 蒼龍翅膀 | 1：Middle 獎圈，翅膀移除（odds 依 FishData = 100） |
+
+- 獵龍騎士的「佔領」機制（佔領者 / 累積金額面板、`U2G_UPDATE_OCCUPY_REQ`、限制押注提示）本階段不做。
+
+### 14.7 假 server 排程
+
+- `SUPPORTED_FISH_TYPES` 加上 15–17、22–28。
+- 新增 `special`（15–17 群組，每 25s，同時 1 組）、`knight`（22 群組，每 90s，同時 1 組）；
+  `boss` 改為從 35 帝王暴龍、33 樹精哥布林、36 遠古巨蠍、37 風神翼龍、57 翔空蒼龍 隨機挑一組（`BOSS_GROUPS`），每 180s，同時 1 組。
+- 召喚魚選單、自動設定面板的可選魚種會自動包含新魚（依 `isFishSupported`）。
+
+### 14.8 本階段不做
+
+| 項目 | 說明 |
+|---|---|
+| Boss 專用 shader | TRex / 樹精 / 巨蠍 / 風神的 matcap + 法線（merged texture）、蒼龍呼吸光；先用一般 FishMaterial |
+| 特色魚大招 | 鐮刀龍跳斬、腫頭龍衝撞（變身武器）、火盜龍爆炸（HitMore）→ 降級為小獎死亡 |
+| BossShow / Overlay 大獎演出 | 同 §7.2 |
+| Boss 來襲 UI | 只發 `onBossComing` 事件 |
+| 獵龍騎士佔領 | §14.6 |
+
+---
+
+## 15. 場景切換（debug 下拉選單）+ 空中(黃昏) 場景
+
+> 來源：原版 `Define/SceneDefine.lua`、`System/BGSceneSystem.lua`、`System/TimelineSystem.lua`（`RECV_G2U_CHANGE_SCENE_NOTIFY`）、
+> `View/GameView/BGSceneLayer.lua`、`View/GameView/BGScene/AzureDragonScene.lua`、`Shader/ground.material`（technique `skybox`）、
+> `Shader/flowmap.frag`、`Define/SoundSceneDefine.lua`、`Test/CommonTestContent.lua`（`TestChangeSceneType`）
+
+### 15.1 場景表（`game/define/SceneDefine.ts`）
+
+| SceneType | 名稱 | 模型 | 狀態 | 陰影色 | BGM |
+|---|---|---|---|---|---|
+| 0 Forest | 森林 | `Models/Scene/Scene01/Scene1.c3b` | Ground | (0.164, 0.25, 0.156) | `bgm/BGM_Normal` |
+| 1 Desert | 沙漠 | `Models/Scene/Scene02/Scene2.c3b` | Ground | (0.329, 0.219, 0.07) | `bgm/BGM_Normal` |
+| 2 Snow | 雪地 | `Models/Scene/Scene03/Scene3.c3b` | Ground | (0.145, 0.145, 0.337) | `bgm/BGM_Normal` |
+| **15 Boss_Sky_Dusk** | **空中(黃昏)** | `Models/Scene/Scene06/Scene_sky.c3b` | **Sky** | 無 | `bgm/BGM_BossSky`（Scene_BG_4） |
+
+- 新增欄位 `state`（原版 `SceneState`：Ground / Sky）、`sky`（原版 `MaterialSetting`：flowmap 貼圖、`u_Switch` 起始值與變天 keyframe）；`shadowColor` 改為選填（天空場景沒有）。
+- `SCENE_LIST` = 目前支援的場景（預載、debug 下拉選單順序）：森林 → 沙漠 → 雪地 → 空中(黃昏)。
+  原版 `TestChangeSceneType` 清單另有 `Boss_Sky`（13，風神翼龍的空中場景），本版未移植。
+
+### 15.2 空中(黃昏) 場景材質（原版 `AzureDragonScene` + technique `skybox`）
+
+- `SceneMaterial` 加 flowmap 變體（`define USE_FLOWMAP`），逐行翻譯 `flowmap.frag`：
+  ```
+  flow   = (flowmap(uv).rg − 0.5) × 0.6
+  phase  = fract(time × 0.2)                    // CC_Time.g = 秒
+  colA   = tex(uv + flow × phase)
+  colB   = tex(uv + flow × fract(phase + 0.51))
+  col    = mix(colA, colB, |phase × 2 − 1|)
+  s      = (uv.y × 4 − 2) + flowmap(uv).b + u_Switch
+  out    = mix(mix(col × (1, .47, .788, .686), col, step(1, s)), (.286, .184, .812, .757), smoothstep(.9, 1, s) − step(1, s))
+  ```
+  uv 一律在 Cocos 座標（`y = 1 − v`，原版頂點 shader 的翻轉）計算，取樣時再轉回 three 座標。
+- `u_Switch` 固定 3（`AzureDragonScene` 建立時設定；> 1 時 `s ≥ 1`，畫面就是流動的天空）。
+  `ChangeStartVal / ChangeKeyFrames`（蒼龍演出的「變天」3 → 2 → −2）先寫進 `sky` 設定，演出本身不在本階段。
+- 時間：`SceneSystem.update(dt)` → `BGScene.update(dt)` 累加，只更新天空材質。
+- 模型是相機前下方 300–2500 單位的半圓頂（背景板），本版以**背景**方式繪製：`renderOrder −2`、不寫深度、不做 frustum culling。
+  原版是 `setForceDepthWrite(true)`；因場上物件都在天空前面，畫面結果相同，但轉場時地面場景可以直接蓋在天空上（§15.3）。
+
+### 15.3 換場景流程（server 決定場景）
+
+原版場景由 server 決定：進房 `G2U_ROOM_DATA_NOTIFY.sceneType`、之後 `G2U_CHANGE_SCENE_NOTIFY {type}`；
+`TimelineSystem` 收到換場景**一律清場**（`ForceEnd`），server 再送新場景的群組。本版照做：
+
+1. Debug 下拉選單送 `U2G_DEBUG_CLIENT_TOOL_USE_REQ {toolType: 100 ChangeScene, target: sceneType}`
+   （100 為本版自訂；原版 `TestChangeSceneType` 是 client 直接改 `BGSceneSystem.SceneType`，server 不知道場景，就無法做 §15.4 的限制）。
+2. 假 server（`RoomModule.changeScene`）：記錄 `sceneType` → 送 `G2U_CHANGE_SCENE_NOTIFY {type}` →
+   `ScriptModule.resetScene()` 清掉所有群組、各排程從頭計時（`next = now + firstDelayMs`，不回填）→ 回 ACK。
+3. Client：
+   - `SceneSystem`：換場景（`BGScene.change`）、更新魚影顏色（有定義時）、魚影開關（Sky → 隱藏，原版 `FishBase:update` `SetShadowDisable(GetSceneInSky())`）、BGM 不同才換、送 `scene:change` 事件。
+     BGM 全部由 `SceneSystem` 依場景播放（原本 `GameApp` 進房固定播 `BGM_Normal`，已移除）。
+   - `FishSystem`：清場（timeline 全部結束 → 魚直接移除、不播死亡表演；死亡表演中的魚照常播完）。
+4. 轉場：Ground ↔ Ground 維持圓形擴散（Iris）。有天空的一方不套 Iris（天空在背景、整段可見）：
+   - 地面 → 天空：天空立即顯示，地面以 Iris 淡出（由近到遠消失，露出後面的天空）。
+   - 天空 → 地面：地面以 Iris 淡入蓋過天空，結束後天空隱藏。
+   原版天空場景是「雲層轉場」（`CloudTransitionChangeScene`：剪影飛過 + CSB 雲層 + 鎖按鈕 / 射擊），本階段不做。
+
+### 15.4 場景限定魚種（`FISH_SCENE_LIMIT`）
+
+| 魚種 | 可出現的場景 | 群組 |
+|---|---|---|
+| 26 風神翼龍、27 翔空蒼龍、28 蒼龍翅膀 | 只有 空中(黃昏) | 37 / 58、57 / 66 |
+| 23 樹精哥布林、24 帝王暴龍、25 遠古巨蠍 | 只有 地面場景（森林 / 沙漠 / 雪地） | 33 / 34、35、36（含 ★ 版本） |
+
+- 原版每隻 Boss 綁自己的 Boss 場景；天空 Boss 只在空中(黃昏) 是需求，地面 Boss 不進天空是對應的反向規則。其他魚種不限。
+- 群組內**所有**魚種都允許才可出現（`isGroupAllowedInScene`）。
+- 假 server 排程：每次挑群組時依目前場景過濾候選（開房回填同樣過濾）→ 空中(黃昏) 的 boss 只會是 37 / 57，地面場景只會是 35 / 33 / 36。
+- Debug 召喚：
+  - 假 server `spawnGroup` 不在允許場景 → `UseFail`（console `__debug.summon()` 也擋）。
+  - 召喚選單：不允許的群組反灰並標「限 空中(黃昏)」/「限 地面」，點擊只跳提示不送封包；換場景時重新整理。
+
+### 15.5 Debug 面板
+
+| 項目 | 行為 |
+|---|---|
+| C 切換場景 | ~~按鈕輪流切換~~ → **下拉選單**（`<select>`，選項 = `SCENE_LIST`，顯示「名稱 (SceneType)」），選了就送 ChangeScene；等 ACK 期間停用；收到 `scene:change` 時同步選取值 |
+| console | `__debug.scene(sceneType)` 同下拉選單 |
+
+### 15.6 本階段不做
+
+| 項目 | 說明 |
+|---|---|
+| 雲層轉場 | §15.3 |
+| 天空中魚的傾斜 | 原版 `UpdateTransformParallelToCamera`（模型 x/y 轉成與相機視線垂直），本版仍用地面朝向 |
+| 天空中的砲台 EFK | 原版 `CannonDefine` 的 `SceneState.Sky` 特效 |
+| 變天演出 | `u_Switch` keyframe（蒼龍 Stage_Change），設定已保留 |
+| Boss_Sky（13）、Boss_Sky2（14）等其他場景 | 未移植 |

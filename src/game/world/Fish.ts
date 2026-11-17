@@ -11,21 +11,38 @@
 import * as THREE from 'three';
 import { setCocosRotation, type Vec2 } from '@core/math/cocos';
 import { makeOBB, type OBB2 } from '@core/math/geom2d';
-import { instantiateC3b, presetSkinnedBounds, sliceC3bClip, type C3bModelTemplate } from '@engine/loaders/C3bLoader';
+import {
+  findCocosNode,
+  instantiateC3b,
+  presetSkinnedBounds,
+  sliceC3bClip,
+  type C3bModelTemplate,
+} from '@engine/loaders/C3bLoader';
 import { FishMaterial, FISH_BLEACH_DEFAULT } from '@engine/materials/FishMaterial';
 import { PlanarShadowMaterial } from '@engine/materials/ShadowMaterial';
+import type { KillFloatOddsNotify } from '@net/protocol';
 import type { FishDefine } from '../define/FishDefine';
 import type { PathTrack } from '../path/PathTrack';
 import type { TimelineFish } from '../timeline/FishTimeline';
+import { FishEfkPlayer, type FishEfkSetting, type FishFxHost } from './FishEfkPlayer';
 
 export const FISH_NODE_SCALE = 3; // 原版：加入場景的龍都會放大 3 倍
 /** 不可選取時的不透明度（FishBase:SetUnSelectable 預設 70） */
 export const UNSELECTABLE_OPACITY = 70;
 
+/** 魚需要的外部環境（由 FishSystem 注入；魚不直接依賴 GameContext） */
+export interface FishEnv extends FishFxHost {
+  /** 已預載的貼圖（執行中換貼圖用） */
+  peekTexture(path: string): THREE.Texture | null;
+  /** 場上存活的魚（找父魚，例如蒼龍翅膀找蒼龍） */
+  aliveFish(): Iterable<Fish>;
+}
+
 export interface FishInit {
   info: TimelineFish;
   define: FishDefine;
-  template: C3bModelTemplate;
+  /** null = 沒有模型（define.model.virtual） */
+  template: C3bModelTemplate | null;
   texture: THREE.Texture | null;
   plugins: C3bModelTemplate[];
   track: PathTrack;
@@ -33,6 +50,8 @@ export interface FishInit {
   /** 生成時已經走了幾秒 */
   elapsed: number;
   fromScratch: boolean;
+  env: FishEnv;
+  efk: FishEfkSetting | null;
 }
 
 /** 依魚種快取：sprite 在魚節點本地座標的 XY 範圍（未乘節點縮放） */
@@ -48,6 +67,7 @@ export class Fish {
   readonly sprite: THREE.Group;
   readonly materials: FishMaterial[] = [];
   readonly shadowMaterials: PlanarShadowMaterial[] = [];
+  private readonly shadowMeshes: THREE.Mesh[] = [];
   readonly mixer: THREE.AnimationMixer;
   readonly track: PathTrack;
   readonly addTime: number;
@@ -61,15 +81,29 @@ export class Fish {
   dying = false;
   pathTime = 0;
 
-  private template: C3bModelTemplate;
+  private template: C3bModelTemplate | null;
   private currentAction: THREE.AnimationAction | null = null;
   private currentAnim = '';
+  /** 目前非 loop 動畫播完的回呼（Sprite3DBase:PlayAnim endCB） */
+  private animEnd: (() => void) | null = null;
+  /** mixer 事件內不能切換動畫 → 排到 update 之後執行 */
+  private deferred: (() => void)[] = [];
   private lastPos: Vec2;
   private readonly pos: Vec2 = { x: 0, y: 0 };
   private footprint: { w: number; h: number; center: THREE.Vector3; height: number };
   private pluginMixers: THREE.AnimationMixer[] = [];
   /** 給子類別：wait marker 處理 */
   protected nextMarker = 0;
+  /** 晚加入快轉中（不觸發 Boss 來襲、不播特效 / 音效） */
+  protected catchingUp = false;
+  protected readonly env: FishEnv;
+  readonly fx: FishEfkPlayer;
+  /** hitBox 所在座標系（hitBoxBone 或魚節點） */
+  private hitBoxFrame: THREE.Object3D;
+  /** 掛在別隻魚身上（例如蒼龍翅膀）：父魚死亡 / 離場時一起移除 */
+  attachedTo: Fish | null = null;
+  /** 不跟腳本路徑移動（原版 InitPathMoveBehaviour 回傳 nil） */
+  protected followPath = true;
   readonly spriteHome = new THREE.Vector3();
 
   constructor(init: FishInit) {
@@ -83,12 +117,13 @@ export class Fish {
     this.track = init.track;
     this.addTime = info.addTime;
     this.fromScratch = init.fromScratch;
+    this.env = init.env;
     this.node.name = `Fish_${this.serial}`;
     this.node.userData.fish = this;
 
     const m = define.model;
-    // ---- sprite（Cocos FishSpriteBase:InitModelSetting）
-    this.sprite = instantiateC3b(template);
+    // ---- sprite（Cocos FishSpriteBase:InitModelSetting）；virtual = 沒有模型（empty.c3t）
+    this.sprite = template ? instantiateC3b(template) : new THREE.Group();
     setCocosRotation(this.sprite, m.spriteRot ?? { x: 90, y: 0, z: 180 });
     const off = m.spriteOffset ?? { x: 0, y: 0, z: 0 };
     this.sprite.position.set(off.x, off.y, off.z);
@@ -133,6 +168,7 @@ export class Fish {
       shadow.frustumCulled = false;
       shadow.renderOrder = 1;
       mesh.parent!.add(shadow);
+      this.shadowMeshes.push(shadow);
     }
 
     this.node.scale.setScalar(m.spriteScale * FISH_NODE_SCALE);
@@ -166,7 +202,19 @@ export class Fish {
     });
 
     this.mixer = new THREE.AnimationMixer(this.sprite);
+    this.mixer.addEventListener('finished', (e) => {
+      if (e.action !== this.currentAction || !this.animEnd) return;
+      const cb = this.animEnd;
+      this.animEnd = null;
+      this.deferred.push(cb);
+    });
+    // RepeatForever(Spawn(anim, efk, sound, shock))：loop 每一輪重播該動畫的 EFK / 音效
+    this.mixer.addEventListener('loop', (e) => {
+      if (e.action === this.currentAction) this.fx.playAnim(this.currentAnim);
+    });
     this.footprint = this.computeFootprint();
+    this.hitBoxFrame = (m.hitBoxBone ? findCocosNode(this.sprite, m.hitBoxBone) : null) ?? this.node;
+    this.fx = new FishEfkPlayer(init.env, this.sprite, init.efk);
 
     // ---- 初始位置 / 朝向（PathMoveNormal:RunMovPathAct）
     this.pathTime = init.elapsed;
@@ -183,18 +231,38 @@ export class Fish {
    * 播放跑步動畫，並快轉到目前時間點的 WaitAction 狀態。
    */
   start(): void {
-    this.playRunAnimation();
+    this.fx.playBody();
+    this.catchingUp = true;
+    this.fx.muted = true;
+    this.onInit();
     this.nextMarker = 0;
     this.processMarkers(this.pathTime, true);
+    this.catchingUp = false;
+    this.fx.muted = false;
+  }
+
+  /** FishBase:Init（播 RunAnimation）；子類別覆寫對應原版各魚 Init（例如生成時隱藏、關閉碰撞） */
+  protected onInit(): void {
+    this.playRunAnimation();
+  }
+
+  /** FishBase:ShowBossComing（晚加入快轉、非從頭開始的魚不提示） */
+  protected bossComing(): void {
+    if (!this.catchingUp && this.fromScratch) this.hooks.onBossComing?.(this);
   }
 
   // ------------------------------------------------------------------
-  // 動畫（Sprite3DBase:PlayAnims）
+  // 動畫（Sprite3DBase:PlayAnim / FishBase:PlayAnims）
   // ------------------------------------------------------------------
 
-  playAnim(name: string, loop = true, speed = 1): boolean {
+  /**
+   * Sprite3DBase:PlayAnim：speed = Animation[key].Speed ?? 參數 speed（設定值優先）；
+   * 非 loop 播完呼叫 onEnd；找不到動畫 → 不播、不呼叫 onEnd（與原版相同）。
+   * 同時播放該動畫的 WithActEfk（FishSpriteBase:CreateSpriteAnim）。
+   */
+  playAnim(name: string, loop = true, speed = 1, onEnd?: () => void): boolean {
     const range = this.define.model.animations[name];
-    if (!range) return false;
+    if (!range || !this.template) return false;
     const clip = sliceC3bClip(this.template, name, range.start, range.end);
     if (!clip) return false;
     const action = this.mixer.clipAction(clip);
@@ -202,10 +270,12 @@ export class Fish {
     action.reset();
     action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
     action.clampWhenFinished = !loop;
-    action.setEffectiveTimeScale(speed * (range.speed ?? 1));
+    action.setEffectiveTimeScale(range.speed ?? speed);
     action.play();
     this.currentAction = action;
     this.currentAnim = name;
+    this.animEnd = loop ? null : (onEnd ?? null);
+    this.fx.playAnim(name);
     return true;
   }
 
@@ -213,11 +283,29 @@ export class Fish {
     return this.currentAnim;
   }
 
-  /** 原版 PlayRunAnimation：RunAnimation 隨機挑一個 loop */
+  /** 是否為 RunAnimation 之一 */
+  isRunAnim(name: string): boolean {
+    return this.define.model.runAnimation.includes(name);
+  }
+
+  /**
+   * FishBase:PlayRunAnimation：只有 1 個 → loop；多個 → 隨機挑一個播一次，播完再隨機挑。
+   * 經過 playAnims（子類別的特殊處理，例如播到走路動畫時開啟碰撞）。
+   */
   playRunAnimation(speed = 1): void {
     const list = this.define.model.runAnimation;
+    if (list.length === 0) return;
+    if (list.length === 1) {
+      this.playAnims(list[0], true, speed);
+      return;
+    }
     const name = list[Math.floor(Math.random() * list.length)];
-    this.playAnim(name, true, speed);
+    this.playAnims(name, false, speed, () => this.playRunAnimation(speed));
+  }
+
+  /** FishBase:PlayAnims（各魚類別覆寫，對照原版各 Fish*.lua 的 PlayAnims） */
+  playAnims(key: string, loop = true, speed = 1, onEnd?: () => void): void {
+    this.playAnim(key, loop, speed, onEnd);
   }
 
   // ------------------------------------------------------------------
@@ -229,6 +317,7 @@ export class Fish {
     if (this.dying) return;
     const prev = this.pathTime;
     this.pathTime = t;
+    if (!this.followPath) return;
     this.track.evaluate(t, this.pos);
     this.node.position.x = this.pos.x;
     this.node.position.y = this.pos.y;
@@ -262,10 +351,20 @@ export class Fish {
     }
   }
 
-  /** 子類別覆寫（例如 TRex：Reset 隱藏、Declare 開始走路） */
+  /** PathMove CreateWaitAnimAct：PlayAnims(ani, true, 1)（子類別在 playAnims 內處理特殊 key） */
   protected onWaitAnim(anim: string, _silent: boolean): void {
-    this.playAnim(anim, true, 1);
+    this.playAnims(anim, true, 1);
   }
+
+  // ------------------------------------------------------------------
+  // 擊殺通知（由 RewardSystem / FishSystem 呼叫；子類別覆寫）
+  // ------------------------------------------------------------------
+
+  /** 收到 KILL_FLOATODDS（不論死不死），在表演前呼叫（原版各魚 OnKillNotify） */
+  onKillNotify(_n: KillFloatOddsNotify): void {}
+
+  /** 確定死亡、開始死亡表演前呼叫 */
+  onKilled(): void {}
 
   // ------------------------------------------------------------------
   // 每幀
@@ -274,6 +373,12 @@ export class Fish {
   update(dt: number): void {
     this.mixer.update(dt);
     for (const m of this.pluginMixers) m.update(dt);
+    this.fx.update(dt);
+    if (this.deferred.length) {
+      const list = this.deferred;
+      this.deferred = [];
+      for (const cb of list) cb();
+    }
   }
 
   // ------------------------------------------------------------------
@@ -287,6 +392,15 @@ export class Fish {
 
   set bleachRate(r: number) {
     for (const m of this.materials) m.bleachRate = r;
+  }
+
+  set shadowColor(c: readonly [number, number, number]) {
+    for (const s of this.shadowMaterials) s.setShadowColor(c);
+  }
+
+  /** 天空場景關閉陰影（原版 FishBase:update → SetShadowDisable(GetSceneInSky())） */
+  set shadowVisible(v: boolean) {
+    for (const s of this.shadowMeshes) s.visible = v;
   }
 
   /** 不可選取（低於目前砲種的限制賠率）：半透明 */
@@ -337,7 +451,9 @@ export class Fish {
         box.expandByPoint(v.applyMatrix4(mesh.matrixWorld));
       }
     });
-    if (box.isEmpty()) box.set(new THREE.Vector3(-1, -1, 0), new THREE.Vector3(1, 1, 2));
+    // virtual（原版 empty.c3t）= 中心在原點的單位方塊
+    if (this.define.model.virtual) box.set(new THREE.Vector3(-0.5, -0.5, -0.5), new THREE.Vector3(0.5, 0.5, 0.5));
+    else if (box.isEmpty()) box.set(new THREE.Vector3(-1, -1, 0), new THREE.Vector3(1, 1, 2));
     this.node.position.copy(saved.p);
     this.node.rotation.copy(saved.r);
     this.node.scale.copy(saved.s);
@@ -361,11 +477,17 @@ export class Fish {
     const hb = this.define.model.hitBox;
     if (hb) out.set(hb.offset?.x ?? 0, hb.offset?.y ?? 0, hb.offset?.z ?? 0);
     else out.set(0, 0, this.footprint.height / 2);
-    this.node.updateWorldMatrix(true, false);
-    return out.applyMatrix4(this.node.matrixWorld);
+    const frame = this.getHitBoxFrame();
+    frame.updateWorldMatrix(true, false);
+    return out.applyMatrix4(frame.matrixWorld);
   }
 
-  /** 點選用的 3D 盒子（魚節點本地座標；原版 FishHitBox：HitBox.Scale / Offset，沒設定則用模型範圍） */
+  /** getLocalHitBox 的座標系（原版 hitBoxAttachBone：掛在骨骼上；否則魚節點） */
+  getHitBoxFrame(): THREE.Object3D {
+    return this.hitBoxFrame;
+  }
+
+  /** 點選用的 3D 盒子（getHitBoxFrame 本地座標；原版 FishHitBox：HitBox.Scale / Offset，沒設定則用模型範圍） */
   getLocalHitBox(out = new THREE.Box3()): THREE.Box3 {
     const hb = this.define.model.hitBox;
     if (hb) {
@@ -398,6 +520,9 @@ export class Fish {
   }
 
   destroy(): void {
+    this.fx.stopAll();
+    this.deferred = [];
+    this.animEnd = null;
     this.mixer.stopAllAction();
     this.node.removeFromParent();
     for (const m of this.materials) m.dispose();

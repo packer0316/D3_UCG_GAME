@@ -1,0 +1,23 @@
+{
+ "withActEfk": {
+  "InGame": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss/Bs03_Ingame.efk",
+     "scale": 5
+    },
+    "bone": "Dummy_all",
+    "sound": {
+     "source": "sound/Scorpion_Roar",
+     "delay": 2.3
+    }
+   },
+   {
+    "sound": {
+     "source": "sound/SP_33_02",
+     "delay": 0.3
+    }
+   }
+  ]
+ }
+}

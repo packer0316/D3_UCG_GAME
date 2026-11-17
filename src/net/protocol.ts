@@ -69,14 +69,20 @@ export interface ClientToServer {
   U2G_HIT_REQ: { bulletId: number; scriptIdDataVec: ScriptIdData[] };
   U2G_DUD_REQ: { bulletId: number };
   U2G_CHANGE_BET_REQ: { bet: number };
-  /** 測試工具（原版 DEBUG_U2G_CLIENT_TOOL_USE_REQ）：toolType 1 = 出獎模式（target 1/0）、2 = 召喚（target = groupId） */
+  /**
+   * 測試工具（原版 DEBUG_U2G_CLIENT_TOOL_USE_REQ）：toolType 1 = 出獎模式（target 1/0）、2 = 召喚（target = groupId）、
+   * 100 = 換場景（target = sceneType，本版自訂）
+   */
   U2G_DEBUG_CLIENT_TOOL_USE_REQ: { toolType: number; target: number; quantity: number };
   /** 自動（智能篩選）可選魚種清單 */
   U2G_SMART_FILTER_LIST_REQ: Record<string, never>;
 }
 
-/** 測試工具類型（TestCommonDefine.lua） */
-export const DebugToolType = { CheatMode: 1, Summon: 2 } as const;
+/**
+ * 測試工具類型（TestCommonDefine.lua；3 FREE_SHOOT、4 ENERGY 未實作）。
+ * ChangeScene 為本版自訂：原版 TestChangeSceneType 由 client 直接切換，本版改由 server 決定場景（SPEC §15.3）
+ */
+export const DebugToolType = { CheatMode: 1, Summon: 2, ChangeScene: 100 } as const;
 export const DebugErrorCode = { Success: 0, NotTestMode: 1, NotInRoom: 2, UseFail: 3 } as const;
 
 export interface ServerToClient {
@@ -87,6 +93,8 @@ export interface ServerToClient {
     betList: number[];
     roomName: string;
   };
+  /** 換場景（原版 G2U_CHANGE_SCENE_NOTIFY）：client 換背景並清場（TimelineSystem ForceEnd） */
+  G2U_CHANGE_SCENE_NOTIFY: { type: number };
   G2U_SYNC_SCRIPT_ACK: ScriptSyncData;
   G2U_ADD_GROUP_SYNC_NOTIFY: ScriptSyncData;
   G2U_SHOOT_NOTIFY: { seat: number; bulletId: number; bet: number; angle: number; seatMoney: number; bulletType: number };

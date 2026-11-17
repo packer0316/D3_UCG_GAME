@@ -16,6 +16,13 @@ export const COMMON_CSD_SOURCE_ROOT =
 export const COMMON_RES_ROOT =
   process.env.D3_COMMON_RES ?? 'D:/GIT_TMD/Git_1/TMDCommon/ClientCocos/TMDCommonResource';
 
+/**
+ * 原版 Lua 原始碼：魚身 EFK 設定以 "lua-efk:<相對此目錄的 .lua>" 列在 groups 內，
+ * 轉成 public/res/Data/FishEfk/<檔名>.json，並複製其中引用的 .efk 與音效（SPEC §14.2）
+ */
+export const LUA_SOURCE_ROOT =
+  process.env.D3_LUA_SRC ?? 'D:/GIT_TMD/Git_1/DragonTycoon3/ClientCocos/DragonTycoon3Lua';
+
 /** Inanna 平台共用資源（VIP 卡等）：以 "inanna:<路徑>" 列在 groups 內，輸出到 public/res/<路徑> */
 export const INANNA_RES_ROOT =
   process.env.D3_INANNA_RES ?? 'D:/GIT_TMD/Git_1/Inanna/InannaResource/Inanna';
@@ -23,7 +30,9 @@ export const INANNA_RES_ROOT =
 export const groups = {
   data: ['Data/PathData.json', 'Data/GroupData.json', 'Data/FishData.json'],
 
-  scene: ['Models/Scene/Scene03/*'],
+  // 地面場景：森林 / 沙漠 / 雪地（SceneDefine Forest / Desert / Snow）
+  // 空中(黃昏)：Boss_Sky_Dusk（Scene_sky.c3b + flowmap SceneB01_flow.png，SPEC §15）
+  scene: ['Models/Scene/Scene01/*', 'Models/Scene/Scene02/*', 'Models/Scene/Scene03/*', 'Models/Scene/Scene06/*'],
 
   fish: [
     // 1-11
@@ -57,6 +66,33 @@ export const groups = {
     'Models/Object/*',
     // 24 帝王暴龍
     'Models/Dinosaur_dt3/1_Boss/dt3_boss_005/dt3_boss_005.c3b',
+  ],
+
+  // ---------------- 第三階段：魚種 15–17、22–28（SPEC §14） ----------------
+  fish2: [
+    // 15 鐮刀龍、16 腫頭龍、17 火盜龍
+    'Models/Dinosaur_dt3/2_Special/Sp_SickleClaw.c3b',
+    'Models/Dinosaur_dt3/2_Special/Sp_ThickHead.c3b',
+    'Models/Dinosaur_dt3/2_Special/Sp_FireFeather.c3b',
+    // 22 獵龍騎士
+    'Models/Dinosaur_dt3/3_SpBoss/Sp_DragonHunter.c3b',
+    // 23 樹精哥布林、25 遠古巨蠍、26 風神翼龍
+    'Models/Dinosaur_dt3/1_Boss/dt3_boss_004/dt3_boss_004.c3b',
+    'Models/Dinosaur_dt3/1_Boss/dt3_boss_003/dt3_boss_003.c3b',
+    'Models/Dinosaur_dt3/1_Boss/dt3_boss_002/dt3_boss_002.c3b',
+    // 27 翔空蒼龍（翅膀存在時的發光貼圖）
+    'Models/Dinosaur_dt3/1_Boss/dt3_boss_AzureDragon/dt3_boss_001.c3b',
+    'Models/Dinosaur_dt3/1_Boss/dt3_boss_AzureDragon/shader/dt3_boss_001_wing_d_emissive.jpg',
+  ],
+
+  // 魚身 EFK（BodyEfk / WithActEfk）：轉 JSON + 複製引用的 efk / 音效。
+  // "|" 後面列出本版會播到的動畫（BodyEfk 一律保留）；BossShow / HitMore 用的動畫之後要做時再加上去。
+  fishEfk: [
+    'lua-efk:View/GameView/Fish/FishTRex/FishTRexEfkSetting.lua|InGame,Walk_1,Walk_2',
+    'lua-efk:View/GameView/Fish/FishTreeGoblin/FishTreeGoblinEfkSetting.lua|InGame,Run,Run2',
+    'lua-efk:View/GameView/Fish/FishScorpion/FishScorpionEfkSetting.lua|InGame,Run',
+    'lua-efk:View/GameView/Fish/FishQuetzalcoatlus/FishQuetzalcoatlusEfkSetting.lua|InGame,Idle_1,Idle_2,Out_Normal',
+    'lua-efk:View/GameView/Fish/FishAzureDragon/FishAzureDragonEfkSetting.lua|InGame,Idle_1,Idle_2,Idle_3,Back,Out,Hurt,Hurt1,Hurt2,Hurt3,Hurt4,Hurt5,Hurt6,Stage_Change',
   ],
 
   cannon: ['Models/Character/MountSkin/dt3_cannon_A.*', 'Models/Character/MountSkin/shader/*_A*'],
@@ -120,6 +156,13 @@ export const groups = {
     'csd:DinosaurExport/Bullet_dt3/dt3_cannon_E_laser.csd',
   ],
 
+  // 獎圈（WinCircleDefine.lua WinCircleRes）：只有編譯後的 csb，以 "csb:<路徑>" 轉成 json
+  winCircle: [
+    'csb:DinosaurExport/reward/Reward_Min_0.csb',
+    'csb:DinosaurExport/reward/Reward_Middle_0.csb',
+    'csb:DinosaurExport/reward/Reward_Big_0.csb',
+  ],
+
   // 座位面板（砲台下方：押注 / 名字 / VIP / 餘額 / ± 按鈕 / 等待加入）
   seatInfo: ['csd:DinosaurExport/main/SeatInfo.csd', 'inanna:vip/VIPCards.plist'],
 
@@ -144,5 +187,7 @@ export const groups = {
     'Sound/mp3/sound/se_51.mp3',
     'Sound/mp3/sound/se_28E.mp3',
     'Sound/mp3/bgm/BGM_Normal.mp3',
+    // 空中(黃昏)（SoundSceneDefine Boss_Sky_Dusk = Scene_BG_4，SPEC §15）
+    'Sound/mp3/bgm/BGM_BossSky.mp3',
   ],
 };

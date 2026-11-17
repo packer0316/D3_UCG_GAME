@@ -1,0 +1,202 @@
+{
+ "withActEfk": {
+  "InGame": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_TRex/Bs05_Ingame.efk",
+     "position": {
+      "x": -10,
+      "y": 30,
+      "z": 0
+     },
+     "rotation": {
+      "x": 90,
+      "y": 90,
+      "z": 180
+     },
+     "scale": 1,
+     "delay": 1.6
+    },
+    "bone": "Dummy_007"
+   },
+   {
+    "sound": {
+     "source": "sound/Dragon_jump_02",
+     "delay": 1.5
+    }
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_TRex/Bs05_Roar.efk",
+     "position": {
+      "x": -15,
+      "y": 15,
+      "z": 0
+     },
+     "scale": 1,
+     "duration": 1.5,
+     "delay": 2.53
+    },
+    "bone": "Bip001 HeadNub"
+   },
+   {
+    "sound": {
+     "source": "sound/SE_ThDrgn_Roar",
+     "delay": 2.46
+    }
+   }
+  ],
+  "Walk_1": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_TRex/Bs05_Walk.efk",
+     "rotation": {
+      "x": -90,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 1,
+     "delay": 1
+    },
+    "bone": "Bip001 L Toe11",
+    "sound": {
+     "source": "sound/se_06A",
+     "delay": 0
+    },
+    "shockWorld": {
+     "times": 1,
+     "delta": 0.3
+    }
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_TRex/Bs05_Walk.efk",
+     "rotation": {
+      "x": -90,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 1,
+     "delay": 2.17
+    },
+    "bone": "Bip001 R Toe11",
+    "sound": {
+     "source": "sound/se_06A",
+     "delay": 0
+    },
+    "shockWorld": {
+     "times": 1,
+     "delta": 0.3
+    }
+   }
+  ],
+  "Walk_2": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_TRex/Bs05_Walk.efk",
+     "rotation": {
+      "x": -90,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 1,
+     "delay": 1
+    },
+    "bone": "Bip001 L Toe11",
+    "sound": {
+     "source": "sound/se_06A",
+     "delay": 0
+    },
+    "shockWorld": {
+     "times": 1,
+     "delta": 0.3
+    }
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_TRex/Bs05_Walk.efk",
+     "rotation": {
+      "x": -90,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 1,
+     "delay": 2.17
+    },
+    "bone": "Bip001 R Toe11",
+    "sound": {
+     "source": "sound/se_06A",
+     "delay": 0
+    },
+    "shockWorld": {
+     "times": 1,
+     "delta": 0.3
+    }
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_TRex/Bs05_Roar.efk",
+     "position": {
+      "x": -15,
+      "y": 15,
+      "z": 0
+     },
+     "scale": 1,
+     "duration": 1.5,
+     "delay": 1.17
+    },
+    "bone": "Bip001 HeadNub",
+    "sound": {
+     "source": "sound/dragon_roar",
+     "delay": 0
+    },
+    "shockWorld": {
+     "times": 1,
+     "delta": 0.3
+    }
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_TRex/Bs05_Walk.efk",
+     "rotation": {
+      "x": -90,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 1,
+     "delay": 3.34
+    },
+    "bone": "Bip001 L Toe11",
+    "sound": {
+     "source": "sound/se_06A",
+     "delay": 0
+    },
+    "shockWorld": {
+     "times": 1,
+     "delta": 0.3
+    }
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_TRex/Bs05_Walk.efk",
+     "rotation": {
+      "x": -90,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 1,
+     "delay": 4.5
+    },
+    "bone": "Bip001 R Toe11",
+    "sound": {
+     "source": "sound/se_06A",
+     "delay": 0
+    },
+    "shockWorld": {
+     "times": 1,
+     "delta": 0.3
+    }
+   }
+  ]
+ }
+}

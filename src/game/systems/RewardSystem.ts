@@ -9,7 +9,7 @@
 import type { KillFloatOddsNotify } from '@net/protocol';
 import { Act } from '@core/tween/Action';
 import { WinCircleType, getFishDefine, type FishDefine } from '../define/FishDefine';
-import { REWARD_PLISTS, FONT_JUMP_OTHER, FONT_JUMP_SELF, FONT_WIN_CIRCLE, WIN_CIRCLE_SHOCK_WORLD } from '../define/RewardDefine';
+import { REWARD_PLISTS, FONT_JUMP_OTHER, FONT_JUMP_SELF, FONT_WIN_CIRCLE, WIN_CIRCLE_CSB, WIN_CIRCLE_SHOCK_WORLD } from '../define/RewardDefine';
 import type { GameContext } from '../GameContext';
 import { Tokens } from '../Tokens';
 import type { Fish } from '../world/Fish';
@@ -38,6 +38,7 @@ export class RewardSystem {
     this.coinSpray = new CoinSpray(deps);
     this.winCircles = new WinCircleManager(
       deps,
+      ctx.csd,
       (seat) => this.seats.winCircleAnchor(seat),
       () => ctx.events.emit('camera:shake', WIN_CIRCLE_SHOCK_WORLD),
     );
@@ -52,6 +53,7 @@ export class RewardSystem {
       assets.font(FONT_JUMP_SELF),
       assets.font(FONT_JUMP_OTHER),
       assets.font(FONT_WIN_CIRCLE),
+      ...Object.values(WIN_CIRCLE_CSB).map((p) => this.ctx.csd.load(p).catch((e) => console.warn('[RewardSystem]', e))),
     ]);
   }
 
@@ -68,6 +70,8 @@ export class RewardSystem {
     const fish = fishSys.getFish(n.scriptIdData.groupIndex * 1000 + n.scriptIdData.fishIndex) ?? null;
     const define = getFishDefine(n.fishType);
     this.ctx.events.emit('fish:kill', { notify: n, fish });
+    // 各魚 OnKillNotify 的額外動作（蒼龍受傷、騎士攻擊…）
+    fish?.onKillNotify(n);
     this.ctx.registries.killShow.resolve(n, define).play(n, fish, define);
   }
 

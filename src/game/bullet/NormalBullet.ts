@@ -65,16 +65,24 @@ export class NormalBullet {
 
   update(dt: number, walls: readonly Vec2[]): BulletWallResult {
     this.age += dt;
-    this.node.position.x += this.vel.x * dt;
-    this.node.position.y += this.vel.y * dt;
-    const hit = circleHitsPolygonEdge(this.pos, this.radius, this.vel, walls);
-    if (!hit) return 'none';
-    this.bounceTimes++;
-    if (this.bounceTimes >= this.def.maxBounceTimes && this.age >= BULLET_MIN_LIFE_BEFORE_BLANK) return 'blank';
-    if (Math.abs(hit.nx) > 0.5) this.vel.x = -this.vel.x;
-    if (Math.abs(hit.ny) > 0.5) this.vel.y = -this.vel.y;
-    this.updateRotation();
-    return 'bounce';
+    // 每小步位移不超過碰撞半徑：牆只在「離邊 ≤ 半徑」時判得到，一步走太遠會直接跨過牆（穿牆）
+    const r = this.radius;
+    const steps = Math.max(1, Math.ceil((Math.hypot(this.vel.x, this.vel.y) * dt) / r));
+    const h = dt / steps;
+    let result: BulletWallResult = 'none';
+    for (let i = 0; i < steps; i++) {
+      this.node.position.x += this.vel.x * h;
+      this.node.position.y += this.vel.y * h;
+      const hit = circleHitsPolygonEdge(this.pos, r, this.vel, walls);
+      if (!hit) continue;
+      this.bounceTimes++;
+      if (this.bounceTimes >= this.def.maxBounceTimes && this.age >= BULLET_MIN_LIFE_BEFORE_BLANK) return 'blank';
+      if (Math.abs(hit.nx) > 0.5) this.vel.x = -this.vel.x;
+      if (Math.abs(hit.ny) > 0.5) this.vel.y = -this.vel.y;
+      this.updateRotation();
+      result = 'bounce';
+    }
+    return result;
   }
 
   destroy(): void {

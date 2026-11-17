@@ -241,6 +241,11 @@ export class CsdNodeView {
     if (ref && this.content instanceof Sprite2D) this.content.setFrame(ref);
   }
 
+  /** 直接換圖（依 frame 名稱在已載入圖集找到的圖，對照 Sprite:setSpriteFrame(name)） */
+  setFrame(ref: SpriteFrameRef | null): void {
+    if (ref && this.content instanceof Sprite2D) this.content.setFrame(ref);
+  }
+
   setBlend(b: [number, number]): void {
     if (this.content) this.applyBlend(this.content, b);
   }

@@ -56,6 +56,11 @@ export class PlanarShadowMaterial extends THREE.ShaderMaterial {
     this.name = 'PlanarShadowMaterial';
   }
 
+  /** 換場景時更新陰影色（原版 ModelMgr:setShadowColor） */
+  setShadowColor(c: readonly [number, number, number]): void {
+    (this.uniforms.uShadowColor.value as THREE.Vector3).set(c[0], c[1], c[2]);
+  }
+
   /** 跟著魚的 u_color.a 淡出 */
   set opacityFactor(a: number) {
     this.uniforms.uAlpha.value = SHADOW_ALPHA * a;

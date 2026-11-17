@@ -14,6 +14,7 @@ import {
   WIN_CIRCLE_SLOT_OFFSETS,
   WIN_CIRCLE_SOUND,
 } from '../define/RewardDefine';
+import type { CsdLibrary } from '@engine/csd/CsdPlayer';
 import type { OverlayDeps } from './OverlayDeps';
 import { WinCircle, type WinCircleParams } from './WinCircle';
 
@@ -24,9 +25,12 @@ interface SeatCircles {
 
 export class WinCircleManager {
   private seats = new Map<number, SeatCircles>();
+  /** 所有還在畫面上的獎圈（含已離開槽位、正在播 end 的） */
+  private live = new Set<WinCircle>();
 
   constructor(
     private readonly deps: OverlayDeps,
+    private readonly csd: CsdLibrary,
     /** 座位的獎圈錨點（設計座標） */
     private readonly anchorOf: (seat: number) => { x: number; y: number },
     private readonly onBigCircle?: () => void,
@@ -46,7 +50,8 @@ export class WinCircleManager {
       sc.slots.push(null);
       slot = WIN_CIRCLE_MAX_PER_SEAT - 1;
     }
-    const circle = new WinCircle(this.deps, params);
+    const circle = new WinCircle(this.deps, this.csd, params);
+    this.live.add(circle);
     const look = params.isSelf ? WIN_CIRCLE_SELF : WIN_CIRCLE_OTHER;
     const a = this.anchorOf(seat);
     const off = WIN_CIRCLE_SLOT_OFFSETS[slot] ?? { x: 0, y: 0 };
@@ -61,6 +66,10 @@ export class WinCircleManager {
   }
 
   update(dt: number): void {
+    for (const c of this.live) {
+      c.update(dt);
+      if (c.done) this.live.delete(c);
+    }
     for (const sc of this.seats.values()) {
       if (sc.slots.every((s) => s === null)) continue;
       sc.timer -= dt;

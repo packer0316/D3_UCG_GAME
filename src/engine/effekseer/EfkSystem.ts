@@ -42,10 +42,18 @@ interface Playing {
   speed: number;
   stopped: boolean;
   effect: effekseer.EffekseerEffect;
+  /** 目前是否顯示（掛點或任一祖先隱藏 → 隱藏，對應 cocos 節點不 visit 就不畫） */
+  shown: boolean;
 }
 
 const DEFAULT_DURATION = 3;
 const DEFAULT_MAX_CONCURRENT = 6;
+
+/** 自己與所有祖先都 visible */
+function isVisibleChain(o: THREE.Object3D | null): boolean {
+  for (; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -115,9 +123,15 @@ export class EfkSystem {
   }
 
   play(setting: EfkSetting, attachTo: THREE.Object3D | null = null, worldPos?: THREE.Vector3): EfkHandle {
-    const maxC = setting.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
-    const sameFile = this.playing.filter((p) => p.file === setting.file && !p.stopped);
-    if (!this.ctx || sameFile.length >= maxC) return { stop() {}, alive: false };
+    if (!this.ctx) return { stop() {}, alive: false };
+    // 常駐特效（Duration = -1）不受同檔上限限制，也不佔名額（原版 EffekseerMgr:CanPlayEfk）
+    const looping = (setting.duration ?? DEFAULT_DURATION) < 0;
+    if (!looping) {
+      const maxC = setting.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
+      let same = 0;
+      for (const p of this.playing) if (p.file === setting.file && !p.stopped && p.life !== Infinity) same++;
+      if (same >= maxC) return { stop() {}, alive: false };
+    }
 
     // 本地 transform（Cocos：setPosition3D / setRotation3D / setScale）
     const o = this.tmpObj;
@@ -140,6 +154,7 @@ export class EfkSystem {
       speed: setting.speed ?? 1,
       stopped: false,
       effect: null as unknown as effekseer.EffekseerEffect,
+      shown: true,
     };
     this.playing.push(entry);
     this.load(setting.file).then(
@@ -198,6 +213,11 @@ export class EfkSystem {
         }
         e.attach.updateWorldMatrix(true, false);
         this.tmpM.multiplyMatrices(e.attach.matrixWorld, e.local);
+        const shown = isVisibleChain(e.attach);
+        if (shown !== e.shown) {
+          e.shown = shown;
+          e.handle.setShown(shown);
+        }
       } else {
         this.tmpM.copy(e.local);
       }

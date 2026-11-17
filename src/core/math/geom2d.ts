@@ -70,10 +70,11 @@ export function circleHitsPolygonEdge(
   vel: Vec2,
   poly: readonly Vec2[],
 ): WallHit | null {
-  // 判斷多邊形繞向，決定內側法線方向
+  // 判斷多邊形繞向，決定內側法線方向。Σ (x_prev − x_cur)(y_prev + y_cur) = 2 × 有號面積（逆時針為正）
+  // （之前寫成 < 0，順時針的 WALL_POLYGON 法線變成朝外：牆內子彈穿牆不反彈、牆外子彈撞到牆反而被彈回去）
   let area = 0;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) area += (poly[j].x - poly[i].x) * (poly[j].y + poly[i].y);
-  const ccw = area < 0;
+  const ccw = area > 0;
   let best: WallHit | null = null;
   let bestDist = Infinity;
   for (let i = 0; i < poly.length; i++) {

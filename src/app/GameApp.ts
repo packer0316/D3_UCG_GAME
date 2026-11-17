@@ -23,19 +23,19 @@ import type { GameContext, GameEvents, GameLayers } from '@game/GameContext';
 import { Tokens } from '@game/Tokens';
 import { DESIGN_HEIGHT, FIXED_3D_CAMERA } from '@game/define/DisplayDefine';
 import { FISH_DEFINES } from '@game/define/FishDefine';
-import { SceneType } from '@game/define/SceneDefine';
 import { Sound } from '@game/define/SoundDefine';
 import { PathLibrary } from '@game/path/PathTrack';
 import type { FishDataFile, GroupDataMap, PathDataMap } from '@game/path/PathTypes';
 import { FishSystem } from '@game/systems/FishSystem';
 import { RewardSystem } from '@game/systems/RewardSystem';
+import { SceneSystem } from '@game/systems/SceneSystem';
 import { SeatSystem } from '@game/systems/SeatSystem';
 import { ShootingSystem } from '@game/systems/ShootingSystem';
 import { KillShowRegistry } from '@game/show/KillShowRegistry';
-import { BGScene } from '@game/world/BGScene';
 import { CameraShake } from '@game/world/CameraShake';
 import { FishClassRegistry } from '@game/world/FishClassRegistry';
-import { TRexFish } from '@game/world/TRexFish';
+import { PlayField } from '@game/world/PlayField';
+import { registerFishClasses } from '@game/world/fishes';
 import { FakeServer } from '@server-fake/FakeServer';
 import { createLocalTransportPair } from '@server-fake/LocalTransport';
 import { Hud, HUD_PLISTS, preloadHud } from '@ui/Hud';
@@ -65,7 +65,7 @@ export class GameApp {
   private skills!: SkillSystem;
   private lock!: LockSystem;
   private skillPanel!: SkillPanel;
-  private bg!: BGScene;
+  private scene!: SceneSystem;
   private lastTime = 0;
 
   constructor(
@@ -123,7 +123,7 @@ export class GameApp {
       killShow: new KillShowRegistry(),
       bullet: new BulletBehaviorRegistry(),
     };
-    registries.fishClass.register('trex', TRexFish);
+    registerFishClasses(registries.fishClass);
     this.ctx = {
       events,
       services,
@@ -141,8 +141,10 @@ export class GameApp {
       ui,
     };
 
+    services.register(Tokens.PlayField, new PlayField());
     const seat = new SeatSystem(this.ctx);
     this.fishSystem = new FishSystem(this.ctx);
+    this.scene = new SceneSystem(this.ctx);
     this.skills = new SkillSystem(this.ctx);
     this.lock = new LockSystem(this.ctx);
     this.shooting = new ShootingSystem(this.ctx);
@@ -165,15 +167,15 @@ export class GameApp {
     services.register(Tokens.ShootingSystem, this.shooting);
     services.register(Tokens.RewardSystem, this.reward);
     services.register(Tokens.CameraShake, shake);
+    services.register(Tokens.SceneSystem, this.scene);
     this.shooting.setHitFx(this.reward.hitFx);
     events.on('camera:shake', ({ times, delta }) => shake.shake(times, delta));
-    this.bg = new BGScene(assets, layers.bg);
 
     // ---- 5. 預載
     let done = 0;
     const tasks: [string, () => Promise<unknown>][] = [
       ['特效', () => efk.init()],
-      ['場景', () => this.bg.load(SceneType.Snow).then((d) => (this.fishSystem.shadowColor = d.shadowColor))],
+      ['場景', () => this.scene.preload()],
       ['龍', () => this.fishSystem.preload(FISH_DEFINES.map((d) => d.type))],
       ['獎勵', () => this.reward.preload()],
       ['技能', () => Promise.all([this.skillPanel.preload(), this.lock.preload(), aiPanel.preload()])],
@@ -197,6 +199,7 @@ export class GameApp {
 
     // ---- 6. 啟動系統 / UI / 功能
     seat.init();
+    this.scene.init();
     this.fishSystem.init();
     this.skills.init();
     this.lock.init();
@@ -216,7 +219,7 @@ export class GameApp {
     });
     net.send('U2G_LOGIN_REQ', {});
     await net.wait('G2U_SYNC_SCRIPT_ACK').catch((e) => console.error(e));
-    void audio.playBgm(Sound.BGM_NORMAL);
+    // BGM 由 SceneSystem 依場景播放（SoundSceneDefine）
 
     this.loading.done();
     this.lastTime = performance.now();
@@ -229,6 +232,7 @@ export class GameApp {
     this.lastTime = now;
     const c = this.ctx;
     c.actions.update(dt);
+    this.scene.update(dt);
     this.fishSystem.update(dt);
     this.shooting.update(dt);
     this.lock.update(dt);

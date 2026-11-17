@@ -8,9 +8,19 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, copyFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SOURCE_ROOT, CSD_SOURCE_ROOT, COMMON_CSD_SOURCE_ROOT, COMMON_RES_ROOT, INANNA_RES_ROOT, groups } from './asset-manifest.mjs';
+import {
+  SOURCE_ROOT,
+  CSD_SOURCE_ROOT,
+  COMMON_CSD_SOURCE_ROOT,
+  COMMON_RES_ROOT,
+  INANNA_RES_ROOT,
+  LUA_SOURCE_ROOT,
+  groups,
+} from './asset-manifest.mjs';
+import { convertFishEfkSetting, parseSoundTable } from './lib/fish-efk.mjs';
 import { listC3bTextures } from '../src/engine/loaders/C3bParser.ts';
 import { parseCsd, listCsdDeps } from '../src/engine/csd/CsdParser.ts';
+import { parseCsb } from '../src/engine/csd/CsbParser.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DEST_ROOT = resolve(here, '../public/res');
@@ -290,15 +300,85 @@ function processCsd(relPath, from = null, roots = DT3_ROOTS) {
   for (const p of deps.fonts) process_(res(p), abs);
   for (const p of deps.images) process_(res(p), abs);
   for (const p of deps.particles) process_(res(p), abs);
-  for (const p of deps.csds) processCsd(p, relPath, roots);
+  for (const p of deps.csds) (p.endsWith('.csb') ? processCsb(p, relPath) : processCsd(p, relPath, roots));
+}
+
+/**
+ * 編譯後的 .csb（FlatBuffers）→ public/res/<path>.json（只有 csb、沒有 csd 原始檔時用，例如獎圈）。
+ * 從原版資源目錄讀取；相依處理同 processCsd，子檔（ProjectNode）也是 .csb。
+ */
+function processCsb(relPath, from = null) {
+  const key = relPath.toLowerCase();
+  if (csdDone.has(key)) return;
+  csdDone.add(key);
+  const abs = join(SRC, relPath);
+  if (!existsSync(abs)) {
+    missing.push(`csb:${relPath}${from ? `  (ref by ${from})` : ''}`);
+    return;
+  }
+  let csd;
+  try {
+    csd = parseCsb(readFileSync(abs), posix.basename(relPath, '.csb'), (msg) => console.warn(`! ${relPath}: ${msg}`));
+  } catch (err) {
+    console.warn(`! csb 解析失敗 ${relPath}: ${err.message}`);
+    return;
+  }
+  const dest = join(DEST_ROOT, relPath + '.json');
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, JSON.stringify(csd));
+  copied.push(`${relPath}.json  (from csb)`);
+  const deps = listCsdDeps(csd);
+  const res = (p) => join(SRC, p.replace(/^DragonTycoon3Resource\//, ''));
+  for (const p of [...deps.plists, ...deps.fonts, ...deps.images, ...deps.particles]) process_(res(p), abs);
+  for (const p of deps.csds) (p.endsWith('.csb') ? processCsb(p, relPath) : processCsd(p, relPath));
+}
+
+/**
+ * 原版魚 EFK 設定 Lua → public/res/Data/FishEfk/<檔名>.json，並複製引用的 efk（含相依）與音效（SPEC §14.2）
+ */
+let soundTable = null;
+function processLuaEfk(spec) {
+  // "<path>|AnimA,AnimB"：只保留列出的動畫（BodyEfk 一律保留）
+  const [relPath, animList] = spec.split('|');
+  const anims = animList ? animList.split(',').map((s) => s.trim()) : null;
+  const luaRoot = resolve(LUA_SOURCE_ROOT);
+  const abs = join(luaRoot, relPath);
+  if (!existsSync(abs)) {
+    missing.push(`lua-efk:${relPath}`);
+    return;
+  }
+  soundTable ??= parseSoundTable(readFileSync(join(luaRoot, 'Define/SoundDefine.lua'), 'utf8'));
+  let result;
+  try {
+    result = convertFishEfkSetting(readFileSync(abs, 'utf8'), soundTable, anims);
+  } catch (err) {
+    console.warn(`! lua 解析失敗 ${relPath}: ${err.message}`);
+    return;
+  }
+  for (const w of result.warnings) console.warn(`! ${relPath}: ${w}`);
+  const name = posix.basename(toPosix(relPath)).replace(/\.lua$/i, '.json');
+  const dest = join(DEST_ROOT, 'Data/FishEfk', name);
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, JSON.stringify(result.json, null, 1));
+  copied.push(`Data/FishEfk/${name}  (from ${relPath})`);
+  for (const f of result.efkFiles) process_(join(SRC, f), abs);
+  for (const s of result.sounds) process_(join(SRC, 'Sound/mp3', `${s}.mp3`), abs);
 }
 
 const t0 = Date.now();
 for (const [group, list] of Object.entries(groups)) {
   const before = copied.length;
   for (const pattern of list) {
+    if (pattern.startsWith('lua-efk:')) {
+      processLuaEfk(pattern.slice('lua-efk:'.length));
+      continue;
+    }
     if (pattern.startsWith('csd:')) {
       processCsd(pattern.slice(4));
+      continue;
+    }
+    if (pattern.startsWith('csb:')) {
+      processCsb(pattern.slice(4));
       continue;
     }
     if (pattern.startsWith('common-csd:')) {

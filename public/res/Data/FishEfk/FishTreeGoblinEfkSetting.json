@@ -1,0 +1,95 @@
+{
+ "withActEfk": {
+  "InGame": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss/Bs04_Ingame.efk",
+     "scale": 10,
+     "duration": 10
+    },
+    "bone": "Dummy_all"
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss/Bs04_Ingame_Roar.efk",
+     "position": {
+      "x": 2,
+      "y": 20,
+      "z": 0
+     },
+     "scale": 10,
+     "delay": 4
+    },
+    "bone": "Bip001 Head"
+   },
+   {
+    "sound": {
+     "source": "sound/TreeGoblin_ingame",
+     "delay": 0
+    }
+   }
+  ],
+  "Run": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss/Bs04_walk.efk",
+     "scale": 10
+    },
+    "bone": "Dummy_all"
+   },
+   {
+    "sound": {
+     "source": "sound/D_8",
+     "delay": 0
+    }
+   },
+   {
+    "sound": {
+     "source": "sound/D_8",
+     "delay": 1.05
+    }
+   }
+  ],
+  "Run2": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss/Bs04_walk.efk",
+     "scale": 10
+    },
+    "bone": "Dummy_all"
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss/Bs04_walk.efk",
+     "scale": 10,
+     "delay": 2
+    },
+    "bone": "Dummy_all"
+   },
+   {
+    "sound": {
+     "source": "sound/D_8",
+     "delay": 0
+    }
+   },
+   {
+    "sound": {
+     "source": "sound/D_8",
+     "delay": 1.05
+    }
+   },
+   {
+    "sound": {
+     "source": "sound/D_8",
+     "delay": 2.1
+    }
+   },
+   {
+    "sound": {
+     "source": "sound/D_8",
+     "delay": 3.15
+    }
+   }
+  ]
+ }
+}

@@ -4,8 +4,13 @@
  */
 import type { GroupEntry } from '@game/path/PathTypes';
 
-/** client 第一階段支援的魚種 */
-export const SUPPORTED_FISH_TYPES = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 24]);
+/** client 支援的魚種（第一階段 1–14、24；第三階段 15–17、22–28） */
+export const SUPPORTED_FISH_TYPES = new Set([
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 22, 23, 24, 25, 26, 27, 28,
+]);
+
+/** Boss 群組（輪流出現）：35 帝王暴龍、33 樹精哥布林、36 遠古巨蠍、37 風神翼龍、57 翔空蒼龍 */
+export const BOSS_GROUPS = [35, 33, 36, 37, 57];
 
 export interface ScheduleKind {
   kind: string;
@@ -49,12 +54,30 @@ export const SCHEDULE: ScheduleKind[] = [
     filter: (_id, types) => subset(types, range(1, 14)) && [12, 13, 14].some((t) => types.has(t)),
   },
   {
+    // 特色魚：15 鐮刀龍、16 腫頭龍、17 火盜龍（群組 27–32）
+    kind: 'special',
+    intervalMs: 25000,
+    firstDelayMs: 5000,
+    maxActive: 1,
+    backfill: true,
+    filter: (_id, types) => [...types].every((t) => t >= 15 && t <= 17),
+  },
+  {
+    // 獵龍騎士（群組 46 / 47 / 54 / 55 / 56 / 125）
+    kind: 'knight',
+    intervalMs: 90000,
+    firstDelayMs: 12000,
+    maxActive: 1,
+    backfill: false,
+    filter: (_id, types) => types.size === 1 && types.has(22),
+  },
+  {
     kind: 'boss',
     intervalMs: 180000,
     firstDelayMs: 20000,
     maxActive: 1,
     backfill: false,
-    filter: (id) => id === 35, // 帝王暴龍
+    filter: (id) => BOSS_GROUPS.includes(id),
   },
 ];
 

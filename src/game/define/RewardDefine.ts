@@ -34,11 +34,14 @@ export const WIN_CIRCLE_SLOT_OFFSETS = [
 /** 獎圈在座位錨點上方的位置（SeatInfo WinCircleAP，設計座標） */
 export const WIN_CIRCLE_ANCHOR_OFFSET_Y = 190;
 
-export const WIN_CIRCLE_FRAMES: Record<Exclude<WinCircleTypeId, 0>, { frame: string; bg?: string }> = {
-  [WinCircleType.Small]: { frame: 'Reward_Small.png' },
-  [WinCircleType.Middle]: { frame: 'Reward_Middle.png' },
-  [WinCircleType.Big]: { frame: 'Reward_Big01.png', bg: 'reward_big1.png' },
+/** 獎圈 csb（WinCircleDefine.lua WinCircleRes；tools 轉成 <path>.json，CsdPlayer 播放） */
+export const WIN_CIRCLE_CSB: Record<Exclude<WinCircleTypeId, 0>, string> = {
+  [WinCircleType.Small]: 'DinosaurExport/reward/Reward_Min_0.csb',
+  [WinCircleType.Middle]: 'DinosaurExport/reward/Reward_Middle_0.csb',
+  [WinCircleType.Big]: 'DinosaurExport/reward/Reward_Big_0.csb',
 };
+/** 獎圈繪製順序（金幣 5、跳字 7 之間） */
+export const WIN_CIRCLE_RENDER_ORDER = 6;
 
 export const MEGA_PRIZE_IMAGE: Record<MegaPrize, string> = {
   x5: '5TimesReward_word.png',

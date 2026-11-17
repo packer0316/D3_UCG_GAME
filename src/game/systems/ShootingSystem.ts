@@ -25,7 +25,6 @@ import {
   type SpecialBulletTypeId,
 } from '../define/BulletDefine';
 import { CANNON_SKINS } from '../define/CannonDefine';
-import { WALL_POLYGON } from '../define/DisplayDefine';
 import type { GameContext } from '../GameContext';
 import { Tokens } from '../Tokens';
 import { NormalBullet } from '../bullet/NormalBullet';
@@ -35,6 +34,7 @@ import { LaserBeam, LaserShot } from '../bullet/LaserShot';
 import type { ActiveBullet, BulletHost } from '../bullet/BulletTypes';
 import { Cannon, type CannonSkinAssets } from '../world/Cannon';
 import type { Fish } from '../world/Fish';
+import type { PlayField } from '../world/PlayField';
 import { FishHitShow } from '../show/FishHitShow';
 import type { BulletHitFx } from '../show/BulletHitFx';
 
@@ -62,8 +62,11 @@ export class ShootingSystem implements BulletHost {
   private auto = false;
   /** 一般模式下點到魚：按住期間以鎖定彈射擊該魚（放開解除） */
   private clickLock = false;
+  /** 子彈牆（跟相機設定走） */
+  private readonly playField: PlayField;
 
   constructor(private readonly ctx: GameContext) {
+    this.playField = ctx.services.get(Tokens.PlayField);
     this.hitShow = new FishHitShow(ctx.actions);
     ctx.registries.bullet.register('track', (p) => new TrackBullet(p));
     ctx.registries.bullet.register('lightning', (p) => new LightningBullet(p));
@@ -442,7 +445,7 @@ export class ShootingSystem implements BulletHost {
     for (let s = 0; s < steps; s++) {
       for (const b of [...this.normals]) {
         if (!b.alive) continue;
-        const r = b.update(sdt, WALL_POLYGON);
+        const r = b.update(sdt, this.playField.wall);
         if (r === 'blank' || b.age >= BULLET_BLANK_TIME) {
           this.blank(b, new THREE.Vector3(b.node.position.x, b.node.position.y, 0));
           continue;
@@ -464,7 +467,7 @@ export class ShootingSystem implements BulletHost {
     if (this.outsideTimer >= BULLET_OUTSIDE_CHECK_INTERVAL) {
       this.outsideTimer = 0;
       for (const b of [...this.normals]) {
-        if (!pointInPolygon(b.pos, WALL_POLYGON)) this.blank(b, new THREE.Vector3(b.pos.x, b.pos.y, 0));
+        if (!pointInPolygon(b.pos, this.playField.wall)) this.blank(b, new THREE.Vector3(b.pos.x, b.pos.y, 0));
       }
     }
   }

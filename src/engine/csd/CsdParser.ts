@@ -369,7 +369,7 @@ export function listCsdDeps(csd: CsdFile): CsdDeps {
   const addFile = (f: CsdFileRef | undefined | null, nodeType?: CsdNodeType) => {
     if (!f || !f.path || f.type === 'Default') return;
     if (f.plist) deps.plists.add(f.plist);
-    else if (f.path.endsWith('.csd')) deps.csds.add(f.path);
+    else if (f.path.endsWith('.csd') || f.path.endsWith('.csb')) deps.csds.add(f.path);
     else if (nodeType === 'Particle' || f.path.endsWith('.plist')) deps.particles.add(f.path);
     else if (f.type === 'Normal') deps.images.add(f.path);
   };

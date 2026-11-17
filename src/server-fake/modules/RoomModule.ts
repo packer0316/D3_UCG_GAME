@@ -1,5 +1,6 @@
 /** 房間：單人房、3 席（本人 seat 0，其他「等待加入」） */
 import type { SeatData } from '@net/protocol';
+import { SCENE_DEFINES, SceneType } from '@game/define/SceneDefine';
 import type { FakeServer, FakeServerModule } from '../FakeServer';
 import { SMART_FILTER_ORDER, SUPPORTED_FISH_TYPES } from '../config/scheduleConfig';
 
@@ -10,7 +11,7 @@ export const ROOM_CONFIG = {
   initMoney: 31_708_504,
   betList: [10, 50, 100, 500, 1000, 5000],
   defaultBet: 500,
-  sceneType: 2, // Snow
+  sceneType: SceneType.Snow as number,
   vip: 6, // 暫時固定 VIP6（VipLevel.VIP_6 紫金）
 };
 
@@ -20,6 +21,8 @@ export class RoomModule implements FakeServerModule {
   readonly seats: (SeatData | null)[] = [];
   readonly yourSeat = ROOM_CONFIG.yourSeat;
   readonly betList = ROOM_CONFIG.betList;
+  /** 目前場景（排程 / 召喚依此限制魚種，SPEC §15.4） */
+  sceneType = ROOM_CONFIG.sceneType;
 
   install(server: FakeServer): void {
     this.server = server;
@@ -36,7 +39,7 @@ export class RoomModule implements FakeServerModule {
     server.on('U2G_LOGIN_REQ', () => {
       server.send('G2U_ROOM_DATA_NOTIFY', {
         yourseat: this.yourSeat,
-        sceneType: ROOM_CONFIG.sceneType,
+        sceneType: this.sceneType,
         seats: this.seats,
         betList: this.betList,
         roomName: ROOM_CONFIG.roomName,
@@ -58,6 +61,18 @@ export class RoomModule implements FakeServerModule {
   addMoney(delta: number): number {
     this.self.money += delta;
     return this.self.money;
+  }
+
+  /**
+   * 換場景（原版 server 送 G2U_CHANGE_SCENE_NOTIFY）：通知 client → 清掉腳本、新場景從頭排程（SPEC §15.3）。
+   * 未定義的場景或已在該場景 → false
+   */
+  changeScene(sceneType: number): boolean {
+    if (!SCENE_DEFINES[sceneType] || sceneType === this.sceneType) return false;
+    this.sceneType = sceneType;
+    this.server.send('G2U_CHANGE_SCENE_NOTIFY', { type: sceneType });
+    this.server.script.resetScene();
+    return true;
   }
 
   /** debug：補錢 */

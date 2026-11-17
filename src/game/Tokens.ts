@@ -8,6 +8,8 @@ import type { CameraShake } from './world/CameraShake';
 import type { SkillSystem } from './systems/SkillSystem';
 import type { LockSystem } from './systems/LockSystem';
 import type { AIAutoSystem } from './systems/AIAutoSystem';
+import type { SceneSystem } from './systems/SceneSystem';
+import type { PlayField } from './world/PlayField';
 
 export const Tokens = {
   AIAutoSystem: createToken<AIAutoSystem>('AIAutoSystem'),
@@ -18,6 +20,9 @@ export const Tokens = {
   SeatSystem: createToken<SeatSystem>('SeatSystem'),
   RewardSystem: createToken<RewardSystem>('RewardSystem'),
   CameraShake: createToken<CameraShake>('CameraShake'),
+  SceneSystem: createToken<SceneSystem>('SceneSystem'),
+  /** 場內範圍（子彈牆 / 自動選目標範圍），跟相機設定走 */
+  PlayField: createToken<PlayField>('PlayField'),
   /** 假 server（只有本地開發時存在，debug 面板用） */
   FakeServer: createToken<unknown>('FakeServer'),
 };

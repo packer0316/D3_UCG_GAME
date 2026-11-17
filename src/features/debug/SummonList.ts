@@ -77,6 +77,8 @@ export interface SummonEntry {
   /** 來自原版 GroupIdMap */
   original: boolean;
   label: string;
+  /** 群組內魚種（場景限制判斷用；找不到群組 = []） */
+  fishTypes: number[];
 }
 
 export function buildSummonList(
@@ -89,19 +91,21 @@ export function buildSummonList(
     const g = getGroup(groups, id);
     return !!g && g.every((e) => isSupported(e.fish + 1));
   };
+  const typesOf = (id: number) => [...new Set((getGroup(groups, id) ?? []).map((e) => e.fish + 1))];
   const out: SummonEntry[] = GROUP_ID_MAP.map(([name, groupId]) => ({
     groupId,
     name,
     supported: groupSupported(groupId),
     original: true,
     label: `${groupId}-${name}`,
+    fishTypes: typesOf(groupId),
   }));
   const listed = new Set(out.map((e) => e.groupId));
   for (const id of listGroupIds(groups)) {
     if (listed.has(id) || !groupSupported(id)) continue;
-    const types = [...new Set(getGroup(groups, id)!.map((e) => e.fish + 1))];
+    const types = typesOf(id);
     const name = types.map((t) => names.get(t) ?? `#${t}`).join('、');
-    out.push({ groupId: id, name, supported: true, original: false, label: `${id}-${name}` });
+    out.push({ groupId: id, name, supported: true, original: false, label: `${id}-${name}`, fishTypes: types });
   }
   // 原版：依 groupId 由大到小（同 id 維持原順序）
   return out.map((e, i) => ({ e, i })).sort((a, b) => b.e.groupId - a.e.groupId || a.i - b.i).map((x) => x.e);

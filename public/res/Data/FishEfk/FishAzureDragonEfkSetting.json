@@ -1,0 +1,229 @@
+{
+ "withActEfk": {
+  "Hurt1": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_Feather.efk",
+     "rotation": {
+      "x": 90,
+      "y": 180,
+      "z": 30
+     },
+     "scale": 5,
+     "duration": 2
+    },
+    "bone": "Feather_Bone040",
+    "sound": {
+     "source": "sound/AzureDragon_Feather",
+     "delay": 0
+    }
+   }
+  ],
+  "Hurt2": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_Feather.efk",
+     "rotation": {
+      "x": 90,
+      "y": 180,
+      "z": 30
+     },
+     "scale": 5,
+     "duration": 2
+    },
+    "bone": "Feather_Bone033",
+    "sound": {
+     "source": "sound/AzureDragon_Feather",
+     "delay": 0
+    }
+   }
+  ],
+  "Hurt3": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_Feather.efk",
+     "rotation": {
+      "x": 90,
+      "y": 180,
+      "z": 30
+     },
+     "scale": 5,
+     "duration": 2
+    },
+    "bone": "Feather_Bone047",
+    "sound": {
+     "source": "sound/AzureDragon_Feather",
+     "delay": 0
+    }
+   }
+  ],
+  "Hurt4": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_Feather.efk",
+     "rotation": {
+      "x": 90,
+      "y": 180,
+      "z": 120
+     },
+     "scale": 5,
+     "duration": 2
+    },
+    "bone": "Feather_Bone040(mirrored)",
+    "sound": {
+     "source": "sound/AzureDragon_Feather",
+     "delay": 0
+    }
+   }
+  ],
+  "Hurt5": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_Feather.efk",
+     "rotation": {
+      "x": 90,
+      "y": 180,
+      "z": 120
+     },
+     "scale": 5,
+     "duration": 2
+    },
+    "bone": "Feather_Bone033(mirrored)",
+    "sound": {
+     "source": "sound/AzureDragon_Feather",
+     "delay": 0
+    }
+   }
+  ],
+  "Hurt6": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_Feather.efk",
+     "rotation": {
+      "x": 90,
+      "y": 180,
+      "z": 120
+     },
+     "scale": 5,
+     "duration": 2
+    },
+    "bone": "Feather_Bone047(mirrored)",
+    "sound": {
+     "source": "sound/AzureDragon_Feather",
+     "delay": 0
+    }
+   }
+  ],
+  "Idle_2": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_Roar.efk",
+     "position": {
+      "x": -1,
+      "y": 10,
+      "z": 0
+     },
+     "rotation": {
+      "x": 180,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 5,
+     "duration": 4,
+     "delay": 0.4
+    },
+    "bone": "Bip001 Head",
+    "sound": {
+     "source": "sound/dragon_yell",
+     "delay": 0
+    }
+   }
+  ],
+  "Stage_Change": [
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_StageChange.efk",
+     "position": {
+      "x": 6,
+      "y": 0,
+      "z": 0
+     },
+     "rotation": {
+      "x": 180,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 8,
+     "duration": 5
+    },
+    "bone": "Bip001 Spine1",
+    "sound": {
+     "source": "sound/AzureDragon_Stage_Change",
+     "delay": 0
+    }
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_Roar.efk",
+     "position": {
+      "x": -1,
+      "y": 10,
+      "z": 0
+     },
+     "rotation": {
+      "x": 180,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 5,
+     "duration": 4,
+     "delay": 2.5
+    },
+    "bone": "Bip001 Head"
+   }
+  ],
+  "Out": [
+   {
+    "sound": {
+     "source": "sound/AzureDragon_Out",
+     "delay": 0
+    }
+   }
+  ],
+  "Back": [
+   {
+    "sound": {
+     "source": "sound/AzureDragon_Back",
+     "delay": 0
+    }
+   }
+  ],
+  "InGame": [
+   {
+    "sound": {
+     "source": "sound/AzureDragon_InGame",
+     "delay": 0
+    }
+   },
+   {
+    "efk": {
+     "file": "Effekseer_dt3/Boss_AzureDragon/Bs_001_Roar.efk",
+     "position": {
+      "x": -1,
+      "y": 10,
+      "z": 0
+     },
+     "rotation": {
+      "x": 180,
+      "y": 0,
+      "z": 0
+     },
+     "scale": 5,
+     "duration": 4,
+     "delay": 3.5
+    },
+    "bone": "Bip001 Head"
+   }
+  ]
+ }
+}

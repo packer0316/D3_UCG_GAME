@@ -9,7 +9,6 @@
 import * as THREE from 'three';
 import { pointInPolygon } from '@core/math/geom2d';
 import type { CsdInstance } from '@engine/csd/CsdPlayer';
-import { WALL_POLYGON } from '../define/DisplayDefine';
 import { LOCK_AIM_CSD, LOCK_CHANGE_SOUND } from '../define/SkillDefine';
 import { aiBaseFishType } from '../define/AIAutoDefine';
 import type { GameContext } from '../GameContext';
@@ -79,7 +78,7 @@ export class LockSystem {
 
   /** 在場內判定範圍（原版 FishBase:GetIsInScreen = 牆多邊形內）；只用於自動選目標 */
   isInScreen(fish: Fish): boolean {
-    return pointInPolygon({ x: fish.node.position.x, y: fish.node.position.y }, WALL_POLYGON);
+    return pointInPolygon({ x: fish.node.position.x, y: fish.node.position.y }, this.ctx.services.get(Tokens.PlayField).wall);
   }
 
   private get fishSystem() {
@@ -150,8 +149,10 @@ export class LockSystem {
     let bestOdds = -1;
     for (const f of this.fishSystem.hittable()) {
       if (!this.isSelectable(f)) continue;
-      f.node.updateWorldMatrix(true, false);
-      const local = this.raycaster.ray.clone().applyMatrix4(this.tmpM.copy(f.node.matrixWorld).invert());
+      // hitBox 可能掛在骨骼上（原版 hitBoxAttachBone，例如翔空蒼龍的脖子）
+      const frame = f.getHitBoxFrame();
+      frame.updateWorldMatrix(true, false);
+      const local = this.raycaster.ray.clone().applyMatrix4(this.tmpM.copy(frame.matrixWorld).invert());
       if (!local.intersectsBox(f.getLocalHitBox(this.tmpBox))) continue;
       const o = this.oddsOf(f);
       if (o > bestOdds) {

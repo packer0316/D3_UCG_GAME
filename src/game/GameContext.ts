@@ -45,6 +45,8 @@ export interface GameEvents {
   'lock:change': { fish: Fish | null };
   /** 自動（AIAuto）狀態改變；shotsLeft -1 = 不限 */
   'ai:change': { active: boolean; shotsLeft: number };
+  /** 場景改變（原版 EVENT_SCENE_CHANGE；進房第一次也會送） */
+  'scene:change': { sceneType: number };
 }
 
 export interface GameLayers {
