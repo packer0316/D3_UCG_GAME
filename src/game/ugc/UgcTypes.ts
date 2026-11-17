@@ -101,6 +101,26 @@ export interface GachaResult {
   count?: number;
 }
 
+/** 一鍵升級：一張魚卡的結果（SPEC-UGC §7.1） */
+export interface CardUpgrade {
+  fishType: number;
+  from: number;
+  to: number;
+  /** 這張卡花掉的碎片 / 金幣 */
+  copies: number;
+  gold: number;
+}
+
+/** 一鍵升級的計畫 / 結果 */
+export interface LevelUpAllPlan {
+  /** 依魚卡順序（CARD_FISH_TYPES） */
+  upgrades: CardUpgrade[];
+  /** 總共升幾級 */
+  levels: number;
+  copies: number;
+  gold: number;
+}
+
 export interface HomeIncome {
   pending: number;
   totalEarned: number;

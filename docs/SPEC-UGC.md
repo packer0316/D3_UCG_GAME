@@ -223,6 +223,23 @@ Boss = 樹精哥布林（23）、帝王暴龍（24）、遠古巨蠍（25）、�
 - 倍率只在**家園**生效（這隻龍被放在屋主的家園時）；公有地的龍一律 ×1。
 - 中獎金額 = 押注 × 賠率 × 倍率；封包的 `floatedOdds` 也乘上倍率。
 
+### 7.1 一鍵升級
+
+魚卡面板魚卡區上方一列：「可升級 N 張」+「一鍵升級」按鈕（沒有可升級的卡 → 反灰）。
+
+- 一次把所有能升的魚卡升到碎片或金幣不夠為止，同一張卡可以連升好幾級。
+- 順序：每次挑「下一級金幣最便宜」的那一步（同價 → 等級低的先 → 魚卡順序）。金幣夠全部升時順序沒差；不夠時能升最多級。
+- 按下先跳確認框（金幣同時是砲台餘額，避免一鍵花光）：
+  - 列出每張卡 `Lv.a → Lv.b` 與該卡花費；
+  - 總共升幾張 / 幾級、碎片與金幣總花費、升級後剩餘金幣；
+  - 「確定」「取消」（Esc / 點框外也是取消）。
+- 確定後送**一個**請求，帶上確認框的金幣總花費 `maxGold`；server 以 `min(餘額, maxGold)` 當預算、用同一套規則重算並套用：
+  - 不會花得比確認的多；確認後金幣變少就少升幾級。
+  - 成功：扣碎片 / 金幣、同步座位餘額、人在自己的家園時房間等級立即更新、送一次資產快照。
+  - 一級都升不了 → 失敗（「沒有可升級的魚卡」）。
+- 完成提示：「一鍵升級：N 張魚卡共升 M 級，花費 X 金幣」。
+- 規則：`planLevelUpAll(profile, budget?)`（只算不改）/ `applyLevelUpAll(profile, budget?)`（`game/ugc/CultivateRule.ts`）。
+
 ---
 
 ## 8. 家園
@@ -354,6 +371,8 @@ Boss = 樹精哥布林（23）、帝王暴龍（24）、遠古巨蠍（25）、�
 | S→C | `G2U_GACHA_DRAW_ACK` | `ok`、`reason?`、`results: GachaResult[]` |
 | C→S | `U2G_CARD_LEVELUP_REQ` | `fishType` |
 | S→C | `G2U_CARD_LEVELUP_ACK` | `ok`、`reason?`、`fishType`、`level` |
+| C→S | `U2G_CARD_LEVELUP_ALL_REQ` | `maxGold`（確認框的金幣總花費，server 的預算上限；§7.1） |
+| S→C | `G2U_CARD_LEVELUP_ALL_ACK` | `ok`、`reason?`、`upgrades: CardUpgrade[]`（`fishType`、`from`、`to`、`copies`、`gold`）、`levels`、`copies`、`gold` |
 | C→S | `U2G_HOME_SAVE_REQ` | `slots: HomeSlot[]` |
 | S→C | `G2U_HOME_SAVE_ACK` | `ok`、`reason?` |
 | C→S | `U2G_HOME_EDIT_REQ` | `editing`（進入 / 離開裝潢模式） |
@@ -369,7 +388,7 @@ Boss = 樹精哥布林（23）、帝王暴龍（24）、遠古巨蠍（25）、�
 原本的協定檔（`net/protocol.ts`）沒有改，UGC 訊息用 declaration merging 加進去。
 
 Debug 工具（`U2G_DEBUG_CLIENT_TOOL_USE_REQ` 的 `toolType`）新增：200 加抽卡券（`quantity` 張）、201 解鎖全部（魚卡 / 場景 / 裝飾物，每張卡碎片 +5）、202 重置存檔。
-Debug 面板多一區「UGC」三個按鈕；console 可用 `__debug.tickets(n)` / `__debug.unlockAll()` / `__debug.resetProfile()`。
+Debug 面板多一區「UGC」：一欄「抽卡券 [張數] 增加」（張數可手動輸入，預設 50，範圍 1–99999，按 Enter 也會送出）+「解鎖全部」「重置存檔」兩個按鈕；console 可用 `__debug.tickets(n)`（n 預設 50）/ `__debug.unlockAll()` / `__debug.resetProfile()`。
 
 ---
 
@@ -383,7 +402,7 @@ src/
 │  ├─ UgcDefine.ts           常數：房號、初始資產、上限、輪替秒數
 │  ├─ UgcTypes.ts            PlayerProfile / HomeSlot / RoomSummary / RoomDetail …
 │  ├─ CardDefine.ts          魚卡清單、稀有度、Boss、蒼龍翅膀歸屬
-│  ├─ CultivateRule.ts       倍率、抽成率、掉券係數、升級成本
+│  ├─ CultivateRule.ts       倍率、抽成率、掉券係數、升級成本、一鍵升級計畫
 │  ├─ GachaDefine.ts         卡池、機率、抽卡（純函式）
 │  ├─ DecoDefine.ts          裝飾物定義、格線、擺放驗證
 │  ├─ HomeRule.ts            輪替表驗證、人氣、訪客收益
@@ -432,10 +451,11 @@ src/
 
 | 項目 | 驗收方式 | 狀態 |
 |---|---|---|
-| 規則（輪替表驗證、Boss 上限、天空 Boss、抽卡機率 / 保底、升級成本、擺放驗證、掉券、存檔整理） | Vitest `tests/ugc-rules.test.ts`（19 項） | ✅ |
-| 假 server（進房、只出允許的魚、輪替、倍率與 RTP、掉券只在外面、抽成 / 領取、離線收益、裝潢、存檔、debug 工具） | Vitest `tests/ugc-server.test.ts`（24 項） | ✅ |
+| 規則（輪替表驗證、Boss 上限、天空 Boss、抽卡機率 / 保底、升級成本、一鍵升級順序 / 預算、擺放驗證、掉券、存檔整理） | Vitest `tests/ugc-rules.test.ts`（21 項） | ✅ |
+| 假 server（進房、只出允許的魚、輪替、倍率與 RTP、掉券只在外面、抽成 / 領取、離線收益、裝潢、一鍵升級、存檔、debug 工具） | Vitest `tests/ugc-server.test.ts`（25 項） | ✅ |
 | 房間列表 / 換房 | 無頭瀏覽器實測：10 間房、看內容、進 10 號房（場景 / 裝潢 / 功能列更新） | ✅ |
 | 抽卡 / 培養 | 無頭瀏覽器實測：十連 10 張結果入帳；帝王暴龍升 Lv.2 扣 1 碎片 + 400,000，房間等級立即更新 | ✅ |
+| 一鍵升級 | 無頭瀏覽器實測：解鎖全部後「可升級 23 張 · 共 79 級」；確認框列出 23 張與總花費 30,800,000、剩餘 908,504（金幣不夠全升，SSR 停在 Lv.5 / 6）；Esc 只關確認框；確定後全部入帳、工具列變「沒有可升級的魚卡」、按鈕反灰 | ✅ |
 | 家園設定 | 無頭瀏覽器實測：森林放 3 隻地面 Boss、新增空中(黃昏) 放 2 隻天空 Boss；不合規則的龍反灰並提示；儲存後回家 10 秒內出 Boss | ✅ |
 | 裝潢模式 | 無頭瀏覽器實測：擺放、重疊擋下、拿起移動、右鍵收回、完成存檔、重新整理後還在；在天空場景按裝潢會先換到地面場景格；取消後相機還原 | ✅ |
 | 掉券表演 / 抽成顯示 | 無頭瀏覽器實測：券飛到抽卡按鈕、券數更新；在 3 號房打龍功能列顯示已貢獻抽成 | ✅ |

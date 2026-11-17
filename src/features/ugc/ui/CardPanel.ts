@@ -1,11 +1,13 @@
 /**
  * 魚卡 / 收藏（SPEC-UGC §5、§7）：所有魚卡（未擁有的反灰）、擁有的場景與裝飾物；點魚卡看等級效果並升級。
+ * 魚卡區上方「一鍵升級」（§7.1）：確認框列出每張卡的升級與總花費，確定後一次送出。
  */
 import type { GameContext } from '@game/GameContext';
 import { CARD_FISH_TYPES, FISH_RARITY, RARITY_NAME, SCENE_RARITY, isBossCard } from '@game/ugc/CardDefine';
-import { checkLevelUp, commissionRate, levelMultiplier, levelUpCost, ticketLevelFactor } from '@game/ugc/CultivateRule';
+import { checkLevelUp, commissionRate, levelMultiplier, levelUpCost, planLevelUpAll, ticketLevelFactor } from '@game/ugc/CultivateRule';
 import { DECO_DEFINES } from '@game/ugc/DecoDefine';
 import { MAX_LEVEL } from '@game/ugc/UgcDefine';
+import type { LevelUpAllPlan } from '@game/ugc/UgcTypes';
 import { FISH_SCENE_LIMIT, isSkyScene } from '@game/define/SceneDefine';
 import type { UgcClient } from '../UgcClient';
 import { Panel } from './Panel';
@@ -14,18 +16,30 @@ import { createSummonCard } from './SummonCard';
 
 export class CardPanel {
   readonly panel: Panel;
+  private readonly upInfo = el('span', 'ugc-card-toolbar-info');
+  private readonly upAllBtn = el('button', 'ugc-btn primary', '一鍵升級');
   private readonly grid = el('div', 'ugc-card-grid');
   private readonly extras = el('div', 'ugc-card-extras');
   private readonly detail = el('div', 'ugc-card-detail');
   private selected: number = CARD_FISH_TYPES[0];
+  /** 一鍵升級的確認框（開著時才有） */
+  private confirm: HTMLDivElement | null = null;
 
   constructor(
     private readonly ctx: GameContext,
     private readonly ugc: UgcClient,
   ) {
     this.panel = new Panel(ctx.ui, { title: '魚卡', width: 940, height: 580, className: 'collection-panel' });
-    this.panel.body.append(el('div', 'ugc-cards', el('div', 'ugc-card-left', this.grid, this.extras), this.detail));
+    const toolbar = el('div', 'ugc-card-toolbar', this.upInfo, this.upAllBtn);
+    this.upAllBtn.addEventListener('click', () => this.openConfirm());
+    this.panel.body.append(el('div', 'ugc-cards', el('div', 'ugc-card-left', toolbar, this.grid, this.extras), this.detail));
     this.panel.onOpen = () => this.render();
+    this.panel.onClose = () => this.closeConfirm();
+    this.panel.onEscape = () => {
+      if (!this.confirm) return false;
+      this.closeConfirm();
+      return true;
+    };
     ctx.events.on('ugc:profile', () => this.panel.isOpen && this.render());
   }
 
@@ -33,6 +47,10 @@ export class CardPanel {
     const p = this.ugc.profile;
     if (!p) return;
     this.panel.setTitle(`魚卡（${Object.keys(p.fish).length} / ${CARD_FISH_TYPES.length}）`);
+
+    const plan = planLevelUpAll(p);
+    this.upInfo.textContent = plan.levels ? `可升級 ${plan.upgrades.length} 張 · 共 ${plan.levels} 級` : '沒有可升級的魚卡';
+    this.upAllBtn.disabled = !plan.levels;
 
     clear(this.grid);
     for (const t of CARD_FISH_TYPES) {
@@ -135,5 +153,79 @@ export class CardPanel {
       btn,
     );
     if (!check.ok) this.detail.append(el('div', 'ugc-detail-warn', check.reason ?? ''));
+  }
+
+  // ------------------------------------------------------------------
+  // 一鍵升級（§7.1）
+  // ------------------------------------------------------------------
+
+  private openConfirm(): void {
+    const p = this.ugc.profile;
+    if (!p || this.confirm) return;
+    // 金幣跟著座位餘額更新（沒有事件），按下時重算
+    const plan = planLevelUpAll(p);
+    if (!plan.levels) {
+      this.ctx.ui.toast('沒有可升級的魚卡');
+      this.render();
+      return;
+    }
+
+    const list = el('div', 'ugc-confirm-list');
+    for (const u of plan.upgrades) {
+      list.append(
+        el(
+          'div',
+          'ugc-confirm-row',
+          rarityTag(FISH_RARITY[u.fishType]),
+          el('span', 'ugc-confirm-name', fishName(u.fishType)),
+          el('span', 'ugc-confirm-lv', `Lv.${u.from} → `, el('b', '', `Lv.${u.to}`)),
+          el('span', 'ugc-confirm-gold', fmt(u.gold)),
+        ),
+      );
+    }
+    const cancel = el('button', 'ugc-btn', '取消');
+    const ok = el('button', 'ugc-btn primary', '確定升級');
+    cancel.addEventListener('click', () => this.closeConfirm());
+    ok.addEventListener('click', () => this.submitLevelUpAll(plan, ok, cancel));
+
+    const sum = (label: string, value: string, cls = '') => el('div', `ugc-confirm-sum-item ${cls}`.trim(), el('span', '', label), el('b', '', value));
+    const box = el(
+      'div',
+      'ugc-confirm-box',
+      el('div', 'ugc-confirm-title', '一鍵升級'),
+      el('div', 'ugc-confirm-sub', `${plan.upgrades.length} 張魚卡 · 共升 ${plan.levels} 級`),
+      list,
+      el(
+        'div',
+        'ugc-confirm-sum',
+        sum('碎片', `−${fmt(plan.copies)}`),
+        sum('金幣', `−${fmt(plan.gold)}`, 'cost'),
+        sum('升級後剩餘金幣', fmt(p.money - plan.gold)),
+      ),
+      el('div', 'ugc-confirm-actions', cancel, ok),
+    );
+    this.confirm = el('div', 'ugc-confirm', box);
+    // 點框外 = 取消
+    this.confirm.addEventListener('pointerdown', (e) => {
+      if (e.target === this.confirm) this.closeConfirm();
+    });
+    this.panel.win.append(this.confirm);
+    ok.focus();
+  }
+
+  private closeConfirm(): void {
+    this.confirm?.remove();
+    this.confirm = null;
+  }
+
+  private async submitLevelUpAll(plan: LevelUpAllPlan, ok: HTMLButtonElement, cancel: HTMLButtonElement): Promise<void> {
+    ok.disabled = cancel.disabled = true;
+    // 預算 = 確認框的總花費：server 不會花得比這更多
+    const r = await this.ugc.levelUpAll(plan.gold);
+    this.closeConfirm();
+    this.ctx.ui.toast(
+      r.ok ? `一鍵升級：${r.upgrades.length} 張魚卡共升 ${r.levels} 級，花費 ${fmt(r.gold)} 金幣` : (r.reason ?? '升級失敗'),
+    );
+    // 成功後 server 會送新的資產 → ugc:profile 重畫
   }
 }

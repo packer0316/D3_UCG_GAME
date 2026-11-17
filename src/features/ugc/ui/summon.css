@@ -11,6 +11,11 @@
 .summon-card-tilt, .summon-card-turn, .summon-card-face { position: absolute; inset: 0; border-radius: inherit; }
 .summon-card-tilt { transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y)); transform-style: preserve-3d; transition: transform .16s ease-out; }
 .summon-card-turn { transform-style: preserve-3d; transition: transform .85s cubic-bezier(.16,.8,.2,1); }
+.summon-card-corner { position: absolute; display: block; width: 0; height: 0; pointer-events: none; }
+.summon-card-corner.corner-tl { top: 0; left: 0; }
+.summon-card-corner.corner-tr { top: 0; right: 0; }
+.summon-card-corner.corner-br { bottom: 0; right: 0; }
+.summon-card-corner.corner-bl { bottom: 0; left: 0; }
 .summon-card.is-revealed .summon-card-turn { transform: rotateY(180deg); }
 .summon-card-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; box-shadow: 0 8px 24px #000b; }
 .summon-card-back, .summon-card-front { background: #1a1713 url('/res/gacha/card-back.webp') center / 100% 100%; }
@@ -90,9 +95,11 @@
 .summon-palette { position: absolute; bottom: 9px; left: 34%; right: 0; display: flex; justify-content: center; gap: 20px; }
 .summon-palette span { color: #b6b1a9; font-size: 9px; letter-spacing: 2px; display: flex; align-items: center; gap: 6px; }
 .summon-palette i { height: 4px; width: 4px; transform: rotate(45deg); background: rgb(var(--card-rgb)); box-shadow: 0 0 8px rgb(var(--card-rgb)); }
-.summon-progress { flex: none; min-height: 28px; display: flex; align-items: center; justify-content: center; gap: 20px; padding: 4px 20px; box-sizing: border-box; }
+/* 「跳過演出」只在演出中出現：按鈕高度固定、這一列的最小高度 = 按鈕 + 上下 padding，
+   按鈕出現 / 消失時列高不變，上面的牌區才不會跟著伸縮（否則十連翻完那一刻整排牌會一起位移） */
+.summon-progress { flex: none; min-height: 34px; display: flex; align-items: center; justify-content: center; gap: 20px; padding: 4px 20px; box-sizing: border-box; }
 .summon-status { color: #c2b9a8; font-size: 11px; text-align: center; letter-spacing: .8px; }
-.summon-skip { padding: 4px 13px; color: #ffdfa3; }
+.summon-skip { height: 26px; box-sizing: border-box; padding: 0 13px; color: #ffdfa3; }
 .summon-footer { flex: none; margin: 0 26px; min-height: 103px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-top: 1px solid #b797513e; }
 .summon-wallet { display: grid; grid-template-columns: auto auto; align-items: center; justify-content: start; column-gap: 20px; row-gap: 7px; }
 .summon-wallet-label { display: flex; align-items: center; gap: 9px; color: #c2b8a2; font-size: 12px; }
@@ -202,7 +209,7 @@
   .summon-action-area, .summon-actions { width: 100%; }.summon-actions { gap: 10px; }
   .summon-draw { flex: 1; min-width: 0; width: auto; height: 47px; padding-inline: 9px; }.summon-guarantee { font-size: 9px; }
   .summon-bottom { justify-content: center; padding-inline: 10px; font-size: 7px; }.summon-bottom > span:first-child { display: none; }
-  .summon-progress { min-height: 33px; gap: 8px; }.summon-status { font-size: 9px; letter-spacing: 0; }.summon-skip { white-space: nowrap; font-size: 9px; }
+  .summon-progress { gap: 8px; }.summon-status { font-size: 9px; letter-spacing: 0; }.summon-skip { white-space: nowrap; font-size: 9px; }
   .summon-result-grid { overflow: auto; grid-template-columns: repeat(3,minmax(0,1fr)); grid-template-rows: none; grid-auto-rows: 140px; gap: 12px 10px; align-items: start; }
   .summon-result-grid .summon-card { width: 100%; height: auto; }.summon-result-grid.is-single .summon-card { width: auto; height: 100%; }
   .summon-inspect { flex-direction: column; gap: 15px; overflow: auto; justify-content: flex-start; }.summon-inspect > .summon-card { height: 240px; }.summon-inspect-copy { text-align: center; }.summon-inspect-copy h2 { margin: 4px 0; }.summon-inspect-copy p { margin: 6px 0; }.summon-inspect-copy .summon-eyebrow { display: none; }

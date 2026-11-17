@@ -118,14 +118,14 @@ function shootAt(h: Harness, target: ScriptIdData, bet = 500) {
 }
 
 describe('房間', () => {
-  it('登入：送資產、房間內容、房間資料；先進 1 號房公有地（6 個場景、所有魚種）', () => {
+  it('登入：送資產、房間內容、房間資料；先進 1 號房公有地（7 個場景、所有魚種）', () => {
     const h = boot();
     login(h);
     const cmds = h.sent.map((m) => m.cmd);
     expect(cmds.slice(0, 4)).toEqual(['G2U_PROFILE_NOTIFY', 'G2U_ROOM_INFO_NOTIFY', 'G2U_ROOM_DATA_NOTIFY', 'G2U_HOME_INCOME_NOTIFY']);
     const { room } = h.last('G2U_ROOM_INFO_NOTIFY')!;
     expect(room).toMatchObject({ roomId: PUBLIC_ROOM_ID, kind: 'public', isMine: false, name: '1號房 公有地' });
-    expect(room.slots).toHaveLength(6);
+    expect(room.slots).toHaveLength(7);
     for (const s of room.slots) for (const t of s.fishTypes) expect(isFishAllowedInScene(t, s.sceneType)).toBe(true);
     const data = h.last('G2U_ROOM_DATA_NOTIFY')!;
     expect(data.roomName).toBe('1號房 公有地');
@@ -411,6 +411,34 @@ describe('抽卡 / 培養', () => {
 
     h.req('U2G_CARD_LEVELUP_REQ', { fishType: 24 });
     expect(h.last('G2U_CARD_LEVELUP_ACK')).toMatchObject({ ok: false, fishType: 24 });
+  });
+
+  it('一鍵升級：以 maxGold 為預算一次升完、餘額同步、房間等級更新；沒有可升的回失敗（§7.1）', () => {
+    const h = boot({ wall: 0, profile: (p) => (p.fish[1].copies = 5) });
+    login(h);
+    enter(h, MY_HOME_ROOM_ID);
+    h.sent.length = 0;
+    // 預算 100,000：20k + 40k，下一級 60k 超過剩下的 40k
+    h.req('U2G_CARD_LEVELUP_ALL_REQ', { maxGold: 100_000 });
+    expect(h.take('G2U_CARD_LEVELUP_ALL_ACK')).toEqual([
+      { ok: true, upgrades: [{ fishType: 1, from: 1, to: 3, copies: 2, gold: 60_000 }], levels: 2, copies: 2, gold: 60_000 },
+    ]);
+    expect(h.profile.fish[1]).toEqual({ level: 3, copies: 3 });
+    expect(h.profile.money).toBe(INITIAL_MONEY - 60_000);
+    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: 0, seatMoney: INITIAL_MONEY - 60_000 });
+    expect(h.last('G2U_ROOM_INFO_NOTIFY')!.room.levels[1]).toBe(3);
+    expect(h.last('G2U_PROFILE_NOTIFY')!.profile.fish[1]).toEqual({ level: 3, copies: 3 });
+
+    // 預算夠：碎片 3 → 再升 1 級（Lv.3 → 4 要 2 片）
+    h.req('U2G_CARD_LEVELUP_ALL_REQ', { maxGold: INITIAL_MONEY });
+    expect(h.take('G2U_CARD_LEVELUP_ALL_ACK')[0]).toMatchObject({ ok: true, levels: 1, gold: 60_000 });
+    expect(h.profile.fish[1]).toEqual({ level: 4, copies: 1 });
+
+    h.sent.length = 0;
+    h.req('U2G_CARD_LEVELUP_ALL_REQ', { maxGold: INITIAL_MONEY });
+    expect(h.last('G2U_CARD_LEVELUP_ALL_ACK')).toMatchObject({ ok: false, reason: '沒有可升級的魚卡', levels: 0 });
+    expect(h.last('G2U_PROFILE_NOTIFY')).toBeUndefined();
+    expect(h.profile.money).toBe(INITIAL_MONEY - 120_000);
   });
 });
 

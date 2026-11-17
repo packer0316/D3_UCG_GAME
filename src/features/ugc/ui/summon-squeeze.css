@@ -1,0 +1,53 @@
+/*
+ * 紫卡（SR）以上的瞇牌：一般 3D 翻牌，但翻到一半會停住。
+ * GachaPanel 依時間軸切 class：is-squeezing（浮起、其他卡壓暗）→ peek-1 / 2 / 3（每段翻一點就停住，越翻越慢、越抖）
+ * → is-windup（往回收一點蓄力）→ is-snap + is-revealed（啪地翻到正面、略過頭再回正）+ just-opened（白閃、彈起後落回）。
+ * 翻轉角度都在 90° 以內，停住時看到的仍是卡背；卡色光從卡底溢出。
+ */
+
+/* 牌發好了等玩家按：中央脈動提示，整個牌區都可以點 */
+.summon-panel[data-phase='ready'] .summon-stage { cursor: pointer; }
+.summon-tap-hint {
+  position: absolute; left: 50%; top: 50%; z-index: 8; transform: translate(-50%,-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 12px 38px; border: 1px solid #e0b96d; border-radius: 2px; cursor: pointer;
+  background: linear-gradient(90deg, #0a0f15d9, #1d1710f2 25%, #1d1710f2 75%, #0a0f15d9);
+  color: #ffeec8; animation: summon-tap-pulse 1.4s ease-in-out infinite;
+}
+.summon-tap-hint b { font: 700 21px/1.2 'Noto Serif TC','PMingLiU',serif; letter-spacing: 6px; text-shadow: 0 0 12px #ffcf7a; }
+.summon-tap-hint small { font: 9px/1 Georgia,serif; letter-spacing: 3px; color: #d6b77a; }
+.summon-tap-hint:hover { filter: brightness(1.2); }
+@keyframes summon-tap-pulse { 0%,100% { box-shadow: 0 0 14px #e0b96d33, inset 0 0 0 3px #0006; } 50% { box-shadow: 0 0 36px #f3cd7d99, inset 0 0 0 3px #0006; } }
+
+/* 其他卡壓暗，聚焦在瞇的那張 */
+.summon-result-grid .summon-card { transition: filter .35s ease; }
+.summon-result-grid.is-focusing .summon-card:not(.is-squeezing):not(.just-opened) { filter: brightness(.4) saturate(.5); }
+
+.summon-card.is-squeezing {
+  z-index: 7; transform: translateY(-10px) scale(1.14);
+  transition: transform .38s cubic-bezier(.2,.9,.3,1.25);
+}
+.summon-card.peek-1 .summon-card-turn { transform: rotateY(34deg); transition: transform .26s cubic-bezier(.2,.9,.3,1); }
+.summon-card.peek-2 .summon-card-turn { transform: rotateY(62deg); transition: transform .3s cubic-bezier(.2,.9,.3,1); }
+.summon-card.peek-3 .summon-card-turn { transform: rotateY(79deg); transition: transform .65s cubic-bezier(.3,.6,.3,1); }
+/* 蓄力：往回收一點，下一拍才翻 */
+.summon-card.is-windup .summon-card-turn { transform: rotateY(22deg); transition: transform .12s cubic-bezier(.4,0,.6,1); }
+/* 啪：快速翻到正面，略過頭再回正 */
+.summon-card.is-snap .summon-card-turn { transition: transform .44s cubic-bezier(.3,1.5,.5,1); }
+
+/* 底光跟著心跳；SSR 跳得更快 */
+.summon-card.is-squeezing .summon-card-aura { opacity: 1; animation: summon-throb 1s ease-in-out infinite; }
+.summon-card.is-squeezing[data-rarity='SSR'] .summon-card-aura { animation-duration: .62s; }
+/* 越翻越抖 */
+.summon-card.peek-2 .summon-card-tilt { animation: summon-tremble .12s linear infinite; }
+.summon-card.peek-3 .summon-card-tilt { animation: summon-tremble .07s linear infinite; }
+
+.summon-card.just-opened { z-index: 7; animation: summon-open-pop .85s cubic-bezier(.2,.8,.2,1); }
+.summon-card.just-opened .summon-card-foil { animation: summon-open-flash .9s ease-out; }
+.summon-card.just-opened .summon-card-aura { opacity: 1; animation: summon-open-aura .9s ease-out; }
+
+@keyframes summon-throb { 0%,100% { transform: scale(1); filter: blur(11px) brightness(1); } 50% { transform: scale(1.14); filter: blur(14px) brightness(1.7); } }
+@keyframes summon-tremble { 0%,100% { translate: 0 0; } 25% { translate: -1.2px .6px; } 50% { translate: 1px -.8px; } 75% { translate: -.6px -.5px; } }
+@keyframes summon-open-pop { 0% { transform: translateY(-10px) scale(1.14); } 30% { transform: translateY(-18px) scale(1.27); } 100% { transform: none; } }
+@keyframes summon-open-flash { 0% { opacity: 1; background-color: rgba(255,255,255,.85); } 35% { opacity: .9; background-color: rgba(var(--card-rgb),.35); } 100% { opacity: .32; background-color: transparent; } }
+@keyframes summon-open-aura { 0% { transform: scale(1.5); filter: blur(18px) brightness(2.2); } 100% { transform: scale(1); filter: blur(11px) brightness(1); } }

@@ -12,15 +12,25 @@ import {
   sceneLimitLabel,
 } from '../src/game/define/SceneDefine';
 
-describe('場景表（SPEC §15 / §16）', () => {
-  it('SCENE_LIST 都有定義，殭屍場景接在最後', () => {
+describe('場景表（SPEC §15 / §16 / §18）', () => {
+  it('SCENE_LIST 都有定義；殭屍場景之後接程序化場景（月球）', () => {
     for (const t of SCENE_LIST) expect(SCENE_DEFINES[t]?.type).toBe(t);
-    expect(SCENE_LIST.slice(-2)).toEqual([SceneType.ZB_Prison, SceneType.ZB_Cemetery]);
+    expect(SCENE_LIST.slice(-3)).toEqual([SceneType.ZB_Prison, SceneType.ZB_Cemetery, SceneType.Space_Moon]);
   });
 
-  it('監獄 / 墓地用第二種相機，其他場景用第一種', () => {
+  it('每個場景不是有模型就是程序化場景（月球沒有模型檔）', () => {
     for (const t of SCENE_LIST) {
-      const zombie = t === SceneType.ZB_Prison || t === SceneType.ZB_Cemetery;
+      const def = SCENE_DEFINES[t];
+      expect(!!def.model !== !!def.procedural, def.name).toBe(true);
+    }
+    expect(SCENE_DEFINES[SceneType.Space_Moon]).toMatchObject({ procedural: 'moon', name: '月球' });
+    expect(GROUND_SCENES).toContain(SceneType.Space_Moon);
+  });
+
+  it('監獄 / 墓地 / 月球用第二種相機，其他場景用第一種', () => {
+    const zombieCamera: number[] = [SceneType.ZB_Prison, SceneType.ZB_Cemetery, SceneType.Space_Moon];
+    for (const t of SCENE_LIST) {
+      const zombie = zombieCamera.includes(t);
       expect(SCENE_DEFINES[t].camera ?? CameraPresetId.Default).toBe(zombie ? CameraPresetId.Zombie : CameraPresetId.Default);
     }
     expect(CAMERA_PRESETS[CameraPresetId.Default].setting).toBe(FIXED_3D_CAMERA);

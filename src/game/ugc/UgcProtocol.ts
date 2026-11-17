@@ -2,7 +2,7 @@
  * UGC 協定（SPEC-UGC §10）：以 declaration merging 加進 @net/protocol，不改原本的協定檔。
  * client（features/ugc）與假 server（server-fake/ugc）都要 import 這個檔。
  */
-import type { DecoPlacement, GachaResult, HomeIncome, HomeSlot, PlayerProfile, RoomDetail, RoomState } from './UgcTypes';
+import type { DecoPlacement, GachaResult, HomeIncome, HomeSlot, LevelUpAllPlan, PlayerProfile, RoomDetail, RoomState } from './UgcTypes';
 
 /** 請求的共通回覆 */
 export interface UgcAck {
@@ -26,6 +26,8 @@ declare module '@net/protocol' {
     U2G_ENTER_ROOM_REQ: { roomId: number };
     U2G_GACHA_DRAW_REQ: { times: number };
     U2G_CARD_LEVELUP_REQ: { fishType: number };
+    /** 一鍵升級；maxGold = 確認框的金幣總花費（server 的預算上限） */
+    U2G_CARD_LEVELUP_ALL_REQ: { maxGold: number };
     U2G_HOME_SAVE_REQ: { slots: HomeSlot[] };
     /** 進入 / 離開裝潢模式（暫停 / 恢復這間房的魚群與輪替） */
     U2G_HOME_EDIT_REQ: { editing: boolean };
@@ -48,6 +50,7 @@ declare module '@net/protocol' {
     G2U_TICKET_DROP_NOTIFY: { scriptIdData: ScriptIdData; count: number; tickets: number };
     G2U_GACHA_DRAW_ACK: UgcAck & { results: GachaResult[] };
     G2U_CARD_LEVELUP_ACK: UgcAck & { fishType: number; level: number };
+    G2U_CARD_LEVELUP_ALL_ACK: UgcAck & LevelUpAllPlan;
     G2U_HOME_SAVE_ACK: UgcAck;
     G2U_HOME_EDIT_ACK: UgcAck & { editing: boolean };
     G2U_HOME_DECO_SAVE_ACK: UgcAck;

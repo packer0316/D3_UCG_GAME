@@ -6,6 +6,7 @@ import type { GachaResult } from '@game/ugc/UgcTypes';
 import { decoName, el, fishName, fmt, sceneName } from './dom';
 import { cardArtwork } from './GachaArtwork';
 import './summon.css';
+import './summon-depth.css';
 
 export type CardFinish = 'white' | 'blue' | 'purple' | 'gold' | 'red';
 export const CARD_FINISH: Record<CardFinish, { label: string; color: string; rgb: readonly [number, number, number] }> = {
@@ -72,8 +73,15 @@ export function createSummonCard(item: GachaItem, opts: SummonCardOptions = {}):
       opts.note && el('small', 'summon-card-note', opts.note)),
     el('div', 'summon-card-foil'),
   );
-  const card = el('button', `summon-card${opts.compact ? ' is-compact' : ''}`, el('div', 'summon-card-aura'),
-    el('div', 'summon-card-tilt', el('div', 'summon-card-turn', el('div', 'summon-card-face summon-card-back'), front)));
+  // Zero-size points inherit the exact browser projection, including nested perspective and animated flips.
+  const corners = ['tl', 'tr', 'br', 'bl'].map(corner => {
+    const point = el('span', `summon-card-corner corner-${corner}`);
+    point.setAttribute('aria-hidden', 'true');
+    return point;
+  });
+  const card = el('button', `summon-card${opts.compact ? ' is-compact' : ''}`,
+    el('div', 'summon-card-tilt', el('div', 'summon-card-turn',
+      el('div', 'summon-card-aura'), el('div', 'summon-card-face summon-card-back'), front, ...corners)));
   card.type = 'button';
   card.dataset.finish = finish;
   card.dataset.rarity = item.rarity;

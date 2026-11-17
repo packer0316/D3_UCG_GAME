@@ -3,6 +3,7 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const baseUrl = process.env.GACHA_TEST_URL ?? 'http://127.0.0.1:5173';
 const output = 'node_modules/.cache/gacha';
 await mkdir(output, { recursive: true });
 const errors = [], checks = [];
@@ -11,7 +12,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-  await page.goto('http://127.0.0.1:5173');
+  await page.goto(baseUrl);
   await page.waitForFunction(() => window.__ugc?.client.profile, null, { timeout: 60000 });
   await page.locator('#loading').waitFor({ state: 'detached', timeout: 60000 });
   await page.keyboard.press('Backquote');
@@ -75,15 +76,23 @@ try {
     client.draw = async times => ({ ok: true, results: times === 1 ? [window.testResults[4]] : window.testResults });
   });
   await page.locator('.summon-draw.primary').click();
+  // 發完牌停在 ready，玩家按一下才開始依序翻
+  await page.waitForFunction(() => window.__ugc.panels.gacha.phase === 'ready');
+  await page.waitForTimeout(1500);
+  check('dealt cards wait for the player', await page.evaluate(() => window.__ugc.panels.gacha.phase === 'ready') && await page.locator('.summon-result-grid .is-revealed').count() === 0 && await page.locator('.summon-tap-hint').isVisible());
+  await page.locator('.summon-tap-hint').click();
   await page.locator('.summon-spotlight').waitFor({ state: 'visible', timeout: 12000 });
   await page.waitForTimeout(350);
   check('SSR receives a dedicated central spotlight', await page.locator('.summon-spotlight .summon-card').count() === 1);
   await page.screenshot({ path: `${output}/revealing.png` });
-  await page.waitForFunction(() => window.__ugc.panels.gacha.phase === 'complete', null, { timeout: 20000 });
+  // 紫卡以上逐張瞇牌：這組固定結果有 4 張 SSR + 2 張 SR，整輪約 30 秒
+  await page.waitForFunction(() => window.__ugc.panels.gacha.phase === 'complete', null, { timeout: 45000 });
   check('automatic reveal completes all ten', await page.locator('.summon-result-grid .is-revealed').count() === 10);
   check('five distinct finishes shown', await page.evaluate(() => new Set([...document.querySelectorAll('.summon-result-grid .summon-card')].map(c => c.dataset.finish)).size === 5));
   await page.screenshot({ path: `${output}/ten-all-finishes.png` });
   await page.locator('.summon-draw:not(.primary)').click();
+  await page.waitForFunction(() => window.__ugc.panels.gacha.phase === 'ready');
+  await page.locator('.summon-result-grid .summon-card').click({ position: { x: 30, y: 20 } });
   await page.waitForTimeout(1600);
   await page.screenshot({ path: `${output}/single-reveal.png` });
   await page.waitForFunction(() => window.__ugc.panels.gacha.phase === 'complete');
@@ -122,7 +131,7 @@ try {
     const original = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function(type, ...args) { return type === 'webgl' ? null : original.call(this, type, ...args); };
   });
-  await fallback.goto('http://127.0.0.1:5173');
+  await fallback.goto(baseUrl);
   await fallback.waitForFunction(() => window.__ugc?.client.profile);
   await fallback.locator('#loading').waitFor({ state: 'detached', timeout: 60000 });
   await fallback.evaluate(() => window.__ugc.panels.gacha.panel.open());

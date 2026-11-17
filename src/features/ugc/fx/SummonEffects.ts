@@ -9,7 +9,8 @@ uniform vec2 uResolution;
 uniform float uTime, uCharge, uAge, uStrength;
 uniform vec2 uOrigin;
 uniform vec3 uColor;
-uniform vec4 uRects[10];
+uniform vec4 uCornersA[10]; // projected top-left / top-right
+uniform vec4 uCornersB[10]; // projected bottom-right / bottom-left
 uniform vec3 uColors[10];
 uniform int uCount;
 
@@ -24,9 +25,20 @@ float fbm(vec2 p) {
   for(int i=0;i<4;i++) { n += a*noise(p); p = m*p*2.03 + 7.1; a *= .5; }
   return n;
 }
-float rectDistance(vec2 p, vec2 b) {
-  vec2 q = abs(p)-b+0.012;
-  return length(max(q,0.0))+min(max(q.x,q.y),0.0)-0.012;
+float cross2(vec2 a, vec2 b) { return a.x*b.y-a.y*b.x; }
+float segmentDistance2(vec2 v, vec2 edge) {
+  vec2 closest = v-edge*clamp(dot(v,edge)/max(dot(edge,edge),.00000001),0.0,1.0);
+  return dot(closest,closest);
+}
+float quadDistance(vec2 p, vec2 a, vec2 b, vec2 c, vec2 d) {
+  vec2 e0=b-a, e1=c-b, e2=d-c, e3=a-d;
+  vec2 v0=p-a, v1=p-b, v2=p-c, v3=p-d;
+  float distance2 = min(min(segmentDistance2(v0,e0),segmentDistance2(v1,e1)),
+                        min(segmentDistance2(v2,e2),segmentDistance2(v3,e3)));
+  // A CSS Y flip reverses the winding; the inside test must work for both faces.
+  vec4 side = vec4(cross2(e0,v0),cross2(e1,v1),cross2(e2,v2),cross2(e3,v3))*sign(cross2(e0,d-a));
+  float inside = step(0.0,min(min(side.x,side.y),min(side.z,side.w)));
+  return sqrt(distance2)*(1.0-2.0*inside);
 }
 void main() {
   vec2 uv = gl_FragCoord.xy/uResolution;
@@ -45,13 +57,22 @@ void main() {
   // Each card has a soft, organically broken fire edge. Geometry is only an invisible distance field.
   for(int i=0;i<10;i++) {
     if(i>=uCount) break;
-    vec4 r = uRects[i];
-    vec2 local = (uv-r.xy)*aspect;
-    float d = rectDistance(local,r.zw*aspect*.5);
-    float edge = exp(-max(d,0.0)*56.0)*smoothstep(-.015,.004,d);
-    float fire = exp(-abs(d-(warp-.45)*.065)*95.0);
+    vec2 a=uCornersA[i].xy*aspect, b=uCornersA[i].zw*aspect;
+    vec2 c=uCornersB[i].xy*aspect, d=uCornersB[i].zw*aspect;
+    float reach = .16;
+    vec2 lo=min(min(a,b),min(c,d)), hi=max(max(a,b),max(c,d));
+    if(any(lessThan(p,lo-reach)) || any(greaterThan(p,hi+reach))) continue;
+    float distance = quadDistance(p,a,b,c,d);
+    // Keep the flame's flow attached to the card's axes as well as its projected outline.
+    vec2 delta = p-(a+b+c+d)*.25;
+    vec2 local = vec2(dot(delta,(b-a)/max(length(b-a),.0001)),dot(delta,(d-a)/max(length(d-a),.0001)));
+    float cardWarp = fbm(local*9.0+drift);
+    float cardFilament = pow(max(0.0,1.0-abs(noise(local*23.0+cardWarp*2.0+drift)-.5)*2.0),13.0);
+    // Original intensity, with only a slightly wider falloff and flame displacement.
+    float edge = exp(-max(distance,0.0)*50.0)*smoothstep(-.015,.004,distance);
+    float fire = exp(-abs(distance-(cardWarp-.45)*.075)*95.0);
     float breath = .65+.25*sin(t*1.8+float(i));
-    color += uColors[i]*(edge*.23+fire*filament*.7)*breath;
+    color += uColors[i]*(edge*.23+fire*cardFilament*.7)*breath;
   }
   // Rising ember field with fine cores and broad photographic bloom.
   vec2 sp = p*vec2(32.0,22.0)+vec2(sin(t*.15)*.5,t*.48);
@@ -85,11 +106,15 @@ export class SummonEffects {
   private program: WebGLProgram | null = null;
   private buffer: WebGLBuffer | null = null;
   private uniforms = new Map<string, WebGLUniformLocation | null>();
-  private cards: HTMLElement[] = [];
+  private cards: { element: HTMLElement; corners: HTMLElement[] }[] = [];
+  private readonly cornersA = new Float32Array(40);
+  private readonly cornersB = new Float32Array(40);
+  private readonly colors = new Float32Array(30);
   private raf = 0;
   private running = false;
   private lastFrame = 0;
   private burstAt = -100_000;
+  private burstTarget: HTMLElement | null = null;
   private charge = 0;
   private currentCharge = 0;
   private origin = [.5, .5];
@@ -133,7 +158,7 @@ export class SummonEffects {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
     const pos = gl.getAttribLocation(program, 'aPosition');
     gl.enableVertexAttribArray(pos); gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
-    for (const name of ['uResolution','uTime','uCharge','uAge','uStrength','uOrigin','uColor','uRects[0]','uColors[0]','uCount']) {
+    for (const name of ['uResolution','uTime','uCharge','uAge','uStrength','uOrigin','uColor','uCornersA[0]','uCornersB[0]','uColors[0]','uCount']) {
       this.uniforms.set(name, gl.getUniformLocation(program, name));
     }
     return true;
@@ -159,6 +184,7 @@ export class SummonEffects {
     this.host.removeEventListener('scroll', this.onScroll, true);
     this.charge = this.currentCharge = 0;
     this.burstAt = -100_000;
+    this.burstTarget = null;
   }
 
   private visibility = (): void => {
@@ -167,8 +193,13 @@ export class SummonEffects {
   };
   private onScroll = (): void => this.layout();
 
-  setCards(cards: HTMLElement[]): void { this.cards = cards.slice(0, 10); this.layout(); }
+  setCards(cards: HTMLElement[]): void {
+    this.cards = cards.slice(0, 10).map(element => ({ element, corners: Array.from(element.querySelectorAll<HTMLElement>('.summon-card-corner')) }));
+    this.layout();
+  }
   setCharge(value: number): void { this.charge = value; }
+  /** Squeeze build-up: move the charge funnel onto a card in its finish colour, without a burst. */
+  aim(finish: CardFinish, target: HTMLElement): void { this.color = CARD_FINISH[finish].rgb; this.burstTarget = target; }
 
   burst(finish: CardFinish, target?: HTMLElement): void {
     this.color = CARD_FINISH[finish].rgb;
@@ -177,6 +208,7 @@ export class SummonEffects {
     const rect = target?.getBoundingClientRect();
     this.origin = rect && bounds.width ? [(rect.left + rect.width / 2 - bounds.left) / bounds.width, (rect.top + rect.height / 2 - bounds.top) / bounds.height] : [.5, .5];
     this.burstAt = performance.now();
+    this.burstTarget = target ?? null;
   }
 
   private layout(): void {
@@ -193,15 +225,34 @@ export class SummonEffects {
     gl.viewport(0, 0, width, height);
     gl.useProgram(this.program);
     gl.uniform2f(this.uniforms.get('uResolution')!, width, height);
-    const rects = new Float32Array(40), colors = new Float32Array(30);
-    this.cards.forEach((card, i) => {
-      const r = card.getBoundingClientRect();
-      rects.set([(r.left+r.width/2-host.left)/host.width, (r.top+r.height/2-host.top)/host.height, r.width/host.width, r.height/host.height], i*4);
-      colors.set(CARD_FINISH[(card.dataset.finish ?? 'gold') as CardFinish].rgb, i*3);
-    });
-    gl.uniform4fv(this.uniforms.get('uRects[0]')!, rects);
-    gl.uniform3fv(this.uniforms.get('uColors[0]')!, colors);
-    gl.uniform1i(this.uniforms.get('uCount')!, this.cards.length);
+    this.updateCardProjection();
+  }
+
+  private updateCardProjection(): void {
+    const gl = this.gl!;
+    const host = this.canvas.getBoundingClientRect();
+    if (host.width <= 0 || host.height <= 0) return;
+    let count = 0;
+    for (const { element, corners } of this.cards) {
+      if (!element.isConnected || corners.length !== 4) continue;
+      const [a, b, c, d] = corners.map(point => point.getBoundingClientRect());
+      const ax=(a.x-host.x)/host.width, ay=(a.y-host.y)/host.height;
+      const bx=(b.x-host.x)/host.width, by=(b.y-host.y)/host.height;
+      const cx=(c.x-host.x)/host.width, cy=(c.y-host.y)/host.height;
+      const dx=(d.x-host.x)/host.width, dy=(d.y-host.y)/host.height;
+      // Hidden cards and an exactly edge-on flip have no surface. Avoid a degenerate SDF.
+      if (Math.abs((bx-ax)*(dy-ay)-(by-ay)*(dx-ax)) < 1e-8) continue;
+      this.cornersA.set([ax,ay,bx,by], count*4);
+      this.cornersB.set([cx,cy,dx,dy], count*4);
+      const finish = CARD_FINISH[(element.dataset.finish ?? 'gold') as CardFinish];
+      this.colors.set(finish.rgb, count*3);
+      if (element === this.burstTarget) this.origin = [(ax+bx+cx+dx)*.25, (ay+by+cy+dy)*.25];
+      count++;
+    }
+    gl.uniform4fv(this.uniforms.get('uCornersA[0]')!, this.cornersA);
+    gl.uniform4fv(this.uniforms.get('uCornersB[0]')!, this.cornersB);
+    gl.uniform3fv(this.uniforms.get('uColors[0]')!, this.colors);
+    gl.uniform1i(this.uniforms.get('uCount')!, count);
   }
 
   private tick = (now: number): void => {
@@ -211,6 +262,9 @@ export class SummonEffects {
     this.lastFrame = now;
     const gl = this.gl!;
     gl.useProgram(this.program);
+    // CSS transforms can change without a resize (hover, fan lift, deal, flip, spotlight).
+    // Read the projected corner points on every rendered frame, reusing the uniform buffers.
+    this.updateCardProjection();
     this.currentCharge += (this.charge-this.currentCharge)*.09;
     gl.uniform1f(this.uniforms.get('uTime')!, now / 1000);
     gl.uniform1f(this.uniforms.get('uCharge')!, this.currentCharge);

@@ -6,7 +6,7 @@ import { Random } from '../src/core/math/random';
 import { FishType } from '../src/game/define/FishDefine';
 import { SceneType } from '../src/game/define/SceneDefine';
 import { BOSS_FISH_TYPES, CARD_FISH_TYPES, FISH_RARITY, cardOf, expandCards, isBossCard } from '../src/game/ugc/CardDefine';
-import { applyLevelUp, checkLevelUp, commissionRate, levelMultiplier, levelUpCost } from '../src/game/ugc/CultivateRule';
+import { applyLevelUp, applyLevelUpAll, checkLevelUp, commissionRate, levelMultiplier, levelUpCost, planLevelUpAll } from '../src/game/ugc/CultivateRule';
 import { DECO_GRID, canPlaceDeco, validateDecoLayout } from '../src/game/ugc/DecoDefine';
 import { GACHA_POOL, GACHA_RARITY_WEIGHT, applyGachaItem, gachaPoolOf, rollGacha } from '../src/game/ugc/GachaDefine';
 import { countBoss, homePopularity, incomePerSecond, slotFishIssue, validateSlots, visitorCount } from '../src/game/ugc/HomeRule';
@@ -121,6 +121,50 @@ describe('培養', () => {
     expect(p.money).toBe(80_000);
     p.fish[1].level = MAX_LEVEL;
     expect(checkLevelUp(p, 1).reason).toContain('最高等級');
+  });
+
+  it('一鍵升級：每張卡升到碎片用完、只算不改；套用後扣碎片與金幣（§7.1）', () => {
+    const { Cub, TRex } = FishType;
+    const p = createInitialProfile(0);
+    p.money = 100_000_000;
+    p.fish = { [Cub]: { level: 1, copies: 5 }, [TRex]: { level: 1, copies: 3 } };
+    // 幼幼龍（N）碎片 1+1+2 → Lv.4；帝王暴龍（SSR）碎片 1+1+1 → Lv.4
+    const expected = {
+      upgrades: [
+        { fishType: Cub, from: 1, to: 4, copies: 4, gold: 120_000 },
+        { fishType: TRex, from: 1, to: 4, copies: 3, gold: 2_400_000 },
+      ],
+      levels: 6,
+      copies: 7,
+      gold: 2_520_000,
+    };
+    expect(planLevelUpAll(p)).toEqual(expected);
+    expect(p.fish[Cub]).toEqual({ level: 1, copies: 5 });
+    expect(applyLevelUpAll(p)).toEqual(expected);
+    expect(p.fish[Cub]).toEqual({ level: 4, copies: 1 });
+    expect(p.fish[TRex]).toEqual({ level: 4, copies: 0 });
+    expect(p.money).toBe(100_000_000 - 2_520_000);
+    // 沒有能升的 → 不改資料
+    expect(applyLevelUpAll(p)).toMatchObject({ upgrades: [], levels: 0, gold: 0 });
+    expect(p.money).toBe(100_000_000 - 2_520_000);
+  });
+
+  it('一鍵升級：金幣有限時便宜的先（同價 → 等級低的先），預算不超過餘額', () => {
+    const { Cub, Scolosaurus, TRex } = FishType;
+    const p = createInitialProfile(0);
+    p.fish = { [Cub]: { level: 1, copies: 5 }, [TRex]: { level: 1, copies: 3 } };
+    p.money = 100_000_000;
+    // 預算 420,000：20k → 40k → 60k 都比帝王暴龍的 400k 便宜，剩下的錢不夠升帝王暴龍
+    expect(planLevelUpAll(p, 420_000)).toMatchObject({ upgrades: [{ fishType: Cub, from: 1, to: 4 }], levels: 3, gold: 120_000 });
+    // 餘額比預算少 → 以餘額為準
+    p.money = 100_000;
+    expect(planLevelUpAll(p, 1e12)).toMatchObject({ upgrades: [{ fishType: Cub, to: 3 }], gold: 60_000 });
+    expect(planLevelUpAll(p, Number.NaN).levels).toBe(0);
+    expect(planLevelUpAll(p, -1).levels).toBe(0);
+    // 同價：N Lv.3（60k）vs R Lv.1（60k）→ 等級低的先
+    p.fish = { [Cub]: { level: 3, copies: 10 }, [Scolosaurus]: { level: 1, copies: 10 } };
+    p.money = 60_000;
+    expect(planLevelUpAll(p).upgrades).toEqual([{ fishType: Scolosaurus, from: 1, to: 2, copies: 1, gold: 60_000 }]);
   });
 });
 

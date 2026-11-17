@@ -17,6 +17,8 @@ export const SceneType = {
   ZB_Prison: 6,
   /** 空中(黃昏)：翔空蒼龍的天空場景 */
   Boss_Sky_Dusk: 15,
+  /** 月球表面（程序化場景，SPEC §18；原版沒有，編號接在原版之後） */
+  Space_Moon: 20,
 } as const;
 
 /** 原版 SceneState */
@@ -84,7 +86,10 @@ export interface SceneDefine {
   type: number;
   /** 顯示名稱（debug 用） */
   name: string;
-  model: string;
+  /** c3b 模型；程序化場景（procedural）沒有 */
+  model?: string;
+  /** 程序化場景（SPEC §18）：game/world/scenes 註冊的建構函式名稱；有設定就不載 model */
+  procedural?: string;
   state: SceneStateId;
   /** 平面陰影顏色（天空場景沒有） */
   shadowColor?: [number, number, number];
@@ -257,6 +262,17 @@ export const SCENE_DEFINES: Record<number, SceneDefine> = {
   },
 };
 
+// ---- 程序化場景（SPEC §18）：沒有模型檔，場景由 game/world/scenes 的程式產生；視角同監獄 / 墓地 ----
+SCENE_DEFINES[SceneType.Space_Moon] = {
+  type: SceneType.Space_Moon,
+  name: '月球',
+  procedural: 'moon',
+  state: SceneState.Ground,
+  shadowColor: [0.25, 0.28, 0.55],
+  bgm: 'bgm/BGM_BossSky',
+  camera: CameraPresetId.Zombie,
+};
+
 /** 地面場景（state = Ground） */
 export const GROUND_SCENES: readonly number[] = Object.values(SCENE_DEFINES)
   .filter((d) => d.state === SceneState.Ground)
@@ -273,6 +289,7 @@ export const SCENE_LIST: readonly number[] = [
   SceneType.Boss_Sky_Dusk,
   SceneType.ZB_Prison,
   SceneType.ZB_Cemetery,
+  SceneType.Space_Moon,
 ];
 
 export function isSkyScene(sceneType: number): boolean {

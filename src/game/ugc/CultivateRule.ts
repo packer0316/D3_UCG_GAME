@@ -1,9 +1,9 @@
 /**
  * 培養：等級效果與升級成本（SPEC-UGC §7）
  */
-import { FISH_RARITY } from './CardDefine';
+import { CARD_FISH_TYPES, FISH_RARITY } from './CardDefine';
 import { MAX_LEVEL } from './UgcDefine';
-import { OK, fail, type PlayerProfile, type Rarity, type RuleResult } from './UgcTypes';
+import { OK, fail, type CardUpgrade, type LevelUpAllPlan, type PlayerProfile, type Rarity, type RuleResult } from './UgcTypes';
 
 const clampLevel = (level: number) => Math.min(MAX_LEVEL, Math.max(1, Math.floor(level) || 1));
 
@@ -64,4 +64,57 @@ export function applyLevelUp(profile: PlayerProfile, fishType: number): RuleResu
   card.level += 1;
   profile.money -= cost.gold;
   return OK;
+}
+
+/**
+ * 一鍵升級的計畫（SPEC-UGC §7.1；只算不改）：
+ * 每次挑下一級金幣最便宜的一步（同價 → 等級低的先 → 魚卡順序），直到碎片或金幣不夠。
+ * budget = 最多花多少金幣（server 用確認框的總花費當上限；不會超過餘額）。
+ */
+export function planLevelUpAll(profile: PlayerProfile, budget: number = profile.money): LevelUpAllPlan {
+  let money = Number.isFinite(budget) ? Math.max(0, Math.min(budget, profile.money)) : 0;
+  const cards = CARD_FISH_TYPES.flatMap((fishType) => {
+    const card = profile.fish[fishType];
+    const rarity = FISH_RARITY[fishType];
+    if (!card || !rarity) return [];
+    const up: CardUpgrade = { fishType, from: card.level, to: card.level, copies: 0, gold: 0 };
+    return [{ rarity, copies: card.copies, up }];
+  });
+
+  const plan: LevelUpAllPlan = { upgrades: [], levels: 0, copies: 0, gold: 0 };
+  for (;;) {
+    let best: (typeof cards)[number] | null = null;
+    let bestCost: LevelUpCost | null = null;
+    for (const c of cards) {
+      const cost = levelUpCost(c.rarity, c.up.to);
+      if (!cost || c.copies < cost.copies || money < cost.gold) continue;
+      if (!bestCost || cost.gold < bestCost.gold || (cost.gold === bestCost.gold && c.up.to < best!.up.to)) {
+        best = c;
+        bestCost = cost;
+      }
+    }
+    if (!best || !bestCost) break;
+    best.copies -= bestCost.copies;
+    money -= bestCost.gold;
+    best.up.to += 1;
+    best.up.copies += bestCost.copies;
+    best.up.gold += bestCost.gold;
+    plan.levels += 1;
+    plan.copies += bestCost.copies;
+    plan.gold += bestCost.gold;
+  }
+  plan.upgrades = cards.filter((c) => c.up.to > c.up.from).map((c) => c.up);
+  return plan;
+}
+
+/** 一鍵升級（照 planLevelUpAll 的結果改資料；一級都升不了 → levels = 0、不改資料） */
+export function applyLevelUpAll(profile: PlayerProfile, budget?: number): LevelUpAllPlan {
+  const plan = planLevelUpAll(profile, budget);
+  for (const u of plan.upgrades) {
+    const card = profile.fish[u.fishType];
+    card.level = u.to;
+    card.copies -= u.copies;
+  }
+  profile.money -= plan.gold;
+  return plan;
 }

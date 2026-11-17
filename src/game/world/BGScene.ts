@@ -7,6 +7,7 @@
  *   每種場景一個節點（m_sceneNodes），同時只有一個可見（KeepScenesSingle）
  *   ChangeScene：沒有上一個場景 → 直接顯示；否則圓形擴散轉場（2 秒，SPEC §15.3 / §16.4）
  *   天空是相機前方的背景板：最先畫、不寫深度；轉場時不套 Iris、整段可見（SPEC §15.3）
+ *   程序化場景（define.procedural，SPEC §18）：不載 c3b，由 scenes/ 的建構函式產生；預載時就建好（含烘焙貼圖）
  */
 import * as THREE from 'three';
 import { setCocosRotation } from '@core/math/cocos';
@@ -15,6 +16,9 @@ import type { ActionManager } from '@core/tween/ActionManager';
 import { findCocosNode, instantiateC3b, sliceC3bClip, type C3bModelTemplate } from '@engine/loaders/C3bLoader';
 import type { AssetManager } from '@engine/assets/AssetManager';
 import { SceneMaterial } from '@engine/materials/SceneMaterial';
+import type { IrisSceneMaterial } from './scenes/ProcMaterial';
+import { getProceduralSceneBuilder, type ProceduralScene } from './scenes/ProceduralScene';
+import './scenes';
 import type { RenderPass, Stage } from '@engine/stage/Stage';
 import {
   IRIS_TRANSITION,
@@ -39,7 +43,9 @@ interface SceneNode {
   type: number;
   def: SceneDefine;
   root: THREE.Group;
-  materials: SceneMaterial[];
+  materials: IrisSceneMaterial[];
+  /** 程序化場景（每幀 update） */
+  proc?: ProceduralScene;
   /** 天空背景（不套 Iris） */
   isSky: boolean;
   /** 進場後經過秒數（墓地紅月） */
@@ -48,7 +54,7 @@ interface SceneNode {
 
 /** 場景 + 掛件用到的所有資源路徑 */
 function scenePaths(def: SceneDefine): { models: string[]; textures: string[] } {
-  const models = [def.model, ...(def.attachments ?? []).map((a) => a.model)];
+  const models = [...(def.model ? [def.model] : []), ...(def.attachments ?? []).map((a) => a.model)];
   const textures = [
     ...(def.sky ? [def.sky.flowMap] : []),
     ...Object.values(def.shader?.textures ?? {}).map((t) => t.path),
@@ -79,6 +85,8 @@ export class BGScene {
   private readonly prevScene = new THREE.Scene();
   private prevCamera: THREE.Camera | null = null;
   private readonly prevPass: RenderPass;
+  /** 程序化場景烘焙貼圖用 */
+  private readonly renderer: THREE.WebGLRenderer;
 
   constructor(
     private readonly assets: AssetManager,
@@ -86,6 +94,7 @@ export class BGScene {
     private readonly actions: ActionManager,
     stage: Stage,
   ) {
+    this.renderer = stage.renderer;
     // World3D（order 100）之前：畫舊場景 → 清深度，新場景在主場景裡蓋上去
     this.prevPass = {
       id: 'bg-prev-scene',
@@ -112,9 +121,11 @@ export class BGScene {
   /** 預載模型與貼圖（切換時不必等下載） */
   preload(types: readonly number[]): Promise<unknown> {
     return Promise.all(
-      types.flatMap((t) => {
+      types.flatMap((t): Promise<unknown>[] => {
         const def = SCENE_DEFINES[t];
         if (!def) return [];
+        // 程序化場景：現在就建好（烘焙貼圖、產生地形），切換時不卡
+        if (def.procedural) return [this.getScene(def)];
         const { models, textures } = scenePaths(def);
         return [...models.map((m) => this.assets.model(m)), ...textures.map((p) => this.assets.texture(p))];
       }),
@@ -147,6 +158,7 @@ export class BGScene {
     for (const n of this.nodes.values()) {
       if (!n.root.visible) continue;
       n.elapsed += dt;
+      n.proc?.update?.(this.time, dt);
       const moon = n.def.moonSwitch ? evalMoonSwitch(n.def.moonSwitch, n.elapsed) : null;
       for (const m of n.materials) {
         if (!m.animated) continue;
@@ -165,6 +177,7 @@ export class BGScene {
   private async getScene(def: SceneDefine): Promise<SceneNode> {
     const cached = this.nodes.get(def.type);
     if (cached) return cached;
+    if (def.procedural) return this.buildProcedural(def);
     const { models, textures } = scenePaths(def);
     const [tpls, texs] = await Promise.all([
       Promise.all(models.map((m) => this.assets.model(m))),
@@ -189,7 +202,7 @@ export class BGScene {
     }
 
     const isSky = !!def.sky;
-    const tpl = tplOf.get(def.model)!;
+    const tpl = tplOf.get(def.model!)!;
     const root = instantiateC3b(tpl);
     setCocosRotation(root, def.rotation ?? { x: 90, y: 0, z: 0 });
     // BGSceneLayer:CreateScene → setScale(define.Scale)：覆寫 c3b 節點帶給根節點的縮放
@@ -258,6 +271,19 @@ export class BGScene {
     return node;
   }
 
+  /** 程序化場景（SPEC §18）：根節點已經是世界座標（Z 朝上），繪製順序由場景自己決定 */
+  private buildProcedural(def: SceneDefine): SceneNode {
+    const build = getProceduralSceneBuilder(def.procedural!);
+    if (!build) throw new Error(`[BGScene] 程序化場景 "${def.procedural}" 沒有註冊`);
+    const proc = build({ renderer: this.renderer });
+    proc.root.name = `scene_${def.type}`;
+    proc.root.visible = false;
+    this.layer.add(proc.root);
+    const node: SceneNode = { type: def.type, def, root: proc.root, materials: proc.materials, isSky: false, elapsed: 0, proc };
+    this.nodes.set(def.type, node);
+    return node;
+  }
+
   private setWrap(tex: THREE.Texture, wrap: THREE.Wrapping): void {
     if (tex.wrapS === wrap && tex.wrapT === wrap) return;
     tex.wrapS = tex.wrapT = wrap;
@@ -292,7 +318,7 @@ export class BGScene {
    */
   private iris(prev: SceneNode, next: SceneNode, range: number, prevCamera: THREE.Camera | null): void {
     const { center, boardAddColor, fadeTime } = IRIS_TRANSITION;
-    const fading: SceneMaterial[] = [];
+    const fading: IrisSceneMaterial[] = [];
     const setIris = (node: SceneNode, mul: number) => {
       for (const m of node.materials) {
         m.setIris(mul, range, center, boardAddColor);

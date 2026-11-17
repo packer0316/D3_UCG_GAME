@@ -1,0 +1,21 @@
+/*
+ * 卡片厚度：卡背 / 卡面各往外推半個厚度，左右兩側補上鎏金切邊（翻轉層的 ::before / ::after）。
+ * 翻牌繞 Y 軸，側邊在瞇牌停住、翻到側面時最明顯；上下邊只在滑鼠傾斜（≤ 6.5°）時露出不到 1px，省略。
+ * 切邊上下內縮一個圓角，避免從卡面圓角凸出去。
+ */
+.summon-card { --card-depth: 5px; }
+.summon-card.is-compact, .collection-panel .summon-card { --card-depth: 4px; }
+.summon-result-grid.is-single .summon-card, .summon-spotlight > .summon-card { --card-depth: 7px; }
+.summon-inspect > .summon-card { --card-depth: 8px; }
+
+.summon-card-back { transform: translateZ(calc(var(--card-depth) / 2)); }
+.summon-card-front { transform: rotateY(180deg) translateZ(calc(var(--card-depth) / 2)); }
+
+.summon-card-turn::before, .summon-card-turn::after {
+  content: ''; position: absolute; top: 7px; bottom: 7px; width: var(--card-depth);
+  left: calc(var(--card-depth) / -2);
+  background: linear-gradient(90deg, #1d150a, #8a6d38 20%, #e9cf91 46%, #fff0c4 50%, #e9cf91 54%, #8a6d38 80%, #1d150a);
+  transform: rotateY(-90deg);
+  pointer-events: none;
+}
+.summon-card-turn::after { left: auto; right: calc(var(--card-depth) / -2); transform: rotateY(90deg); }

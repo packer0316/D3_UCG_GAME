@@ -206,6 +206,21 @@
   background: #1f4d22;
   color: #c8ffc8;
 }
+.dbg-ticket {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dbg-ticket input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #567;
+  background: #0f1822;
+  color: #def;
+  font: 13px Consolas, 'Courier New', monospace;
+}
 .dbg-cam-grid {
   display: grid;
   grid-template-columns: 34px repeat(3, minmax(0, 1fr));

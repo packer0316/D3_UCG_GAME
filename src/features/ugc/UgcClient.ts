@@ -116,6 +116,12 @@ export class UgcClient {
     return r ?? { ok: false, reason: '連線逾時' };
   }
 
+  /** 一鍵升級；maxGold = 確認框顯示的金幣總花費（server 不會花超過） */
+  async levelUpAll(maxGold: number): Promise<ServerToClient['G2U_CARD_LEVELUP_ALL_ACK']> {
+    const r = await this.ask(() => this.ctx.net.send('U2G_CARD_LEVELUP_ALL_REQ', { maxGold }), 'G2U_CARD_LEVELUP_ALL_ACK');
+    return r ?? { ok: false, reason: '連線逾時', upgrades: [], levels: 0, copies: 0, gold: 0 };
+  }
+
   async saveHome(slots: HomeSlot[]): Promise<UgcAck> {
     const r = await this.ask(() => this.ctx.net.send('U2G_HOME_SAVE_REQ', { slots }), 'G2U_HOME_SAVE_ACK');
     return r ?? { ok: false, reason: '連線逾時' };

@@ -6,7 +6,7 @@
  *     召喚列表中限定其他場景的魚（風神翼龍 / 蒼龍只在空中(黃昏)）反灰
  *   D「相機」：切換相機預設（CameraDefine，經 CameraControl）、即時調整 FOV / 位置 / 角度、複製設定；
  *     換場景時相機會依場景自動切換（SPEC §16.4），面板跟著 camera:change 同步
- *   E「UGC」：加抽卡券、解鎖全部魚卡 / 場景 / 裝飾物、重置存檔（SPEC-UGC §10，toolType 200–202）
+ *   E「UGC」：加抽卡券（張數可手動輸入，預設 50）、解鎖全部魚卡 / 場景 / 裝飾物、重置存檔（SPEC-UGC §10，toolType 200–202）
  * 面板是可拖曳的小視窗：拖標題列移動、右上鈕（或雙擊標題列）縮小 / 還原，位置與狀態記在 localStorage。
  * 只透過 GameContext / NetClient 存取遊戲（Feature 擴充機制的範例）。
  */
@@ -42,6 +42,9 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000;
 const CN_NUM = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
 /** 視窗位置 / 縮小狀態（每台瀏覽器各自記） */
 const DEBUG_WINDOW_KEY = 'd3.debug.window';
+/** 加抽卡券：預設張數 / 上限 */
+const TICKET_DEFAULT = 50;
+const TICKET_MAX = 99999;
 
 export class DebugFeature implements GameFeature<GameContext> {
   readonly id = 'debug';
@@ -60,6 +63,9 @@ export class DebugFeature implements GameFeature<GameContext> {
   private cam!: CameraSetting;
   private panel!: HTMLDivElement;
   private minimized = false;
+  private ticketInput!: HTMLInputElement;
+  /** 最後一次送出的加券張數（ACK 不帶張數，toast 用） */
+  private ticketAdded = 0;
 
   install(ctx: GameContext): void {
     this.ctx = ctx;
@@ -93,8 +99,12 @@ export class DebugFeature implements GameFeature<GameContext> {
       </div>
       <button class="dbg-btn" data-act="cam-copy">複製設定</button>
       <div class="dbg-section">UGC</div>
+      <div class="dbg-ticket">
+        <span>抽卡券</span>
+        <input type="number" min="1" max="${TICKET_MAX}" step="1" value="${TICKET_DEFAULT}" />
+        <button class="dbg-cam-preset" data-act="ugc-tickets">增加</button>
+      </div>
       <div class="dbg-cam-presets">
-        <button class="dbg-cam-preset" data-act="ugc-tickets">+10 抽卡券</button>
         <button class="dbg-cam-preset" data-act="ugc-unlock">解鎖全部</button>
         <button class="dbg-cam-preset" data-act="ugc-reset">重置存檔</button>
       </div>
@@ -112,6 +122,11 @@ export class DebugFeature implements GameFeature<GameContext> {
     this.filter = p.querySelector('.dbg-filter input')!;
     this.camPresets = p.querySelector('.dbg-cam-presets')!;
     this.camInputs = [...p.querySelectorAll<HTMLInputElement>('[data-cam]')];
+    this.ticketInput = p.querySelector('.dbg-ticket input')!;
+    this.ticketInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.addTickets();
+    });
+    this.ticketInput.addEventListener('change', () => this.readTicketCount());
     p.addEventListener('pointerdown', (e) => e.stopPropagation());
     p.addEventListener('click', (e) => this.onClick(e));
     this.filter.addEventListener('input', () => this.renderList());
@@ -190,7 +205,7 @@ export class DebugFeature implements GameFeature<GameContext> {
         this.setMinimized(!this.minimized);
         break;
       case 'ugc-tickets':
-        this.sendUgc(UgcDebugTool.AddTickets, 10);
+        this.addTickets();
         break;
       case 'ugc-unlock':
         this.sendUgc(UgcDebugTool.UnlockAll);
@@ -204,6 +219,19 @@ export class DebugFeature implements GameFeature<GameContext> {
   /** UGC 測試工具（假 server DebugModule） */
   private sendUgc(toolType: number, quantity = 0): void {
     this.ctx.net.send('U2G_DEBUG_CLIENT_TOOL_USE_REQ', { toolType, target: 0, quantity });
+  }
+
+  /** 欄位張數：取整數並夾在 1–TICKET_MAX，空白 / 非數字回到預設；把修正後的值寫回欄位 */
+  private readTicketCount(): number {
+    const v = Math.floor(this.ticketInput.valueAsNumber);
+    const n = Number.isFinite(v) ? Math.min(Math.max(v, 1), TICKET_MAX) : TICKET_DEFAULT;
+    this.ticketInput.value = String(n);
+    return n;
+  }
+
+  private addTickets(n = this.readTicketCount()): void {
+    this.ticketAdded = n;
+    this.sendUgc(UgcDebugTool.AddTickets, n);
   }
 
   // ------------------------------------------------------------------
@@ -299,7 +327,7 @@ export class DebugFeature implements GameFeature<GameContext> {
       const entry = this.entries.find((e) => e.groupId === ack.target);
       this.ctx.ui.toast(`${ok ? '已召喚' : '召喚失敗'}：${entry?.label ?? ack.target}`);
     } else if (ack.toolType === UgcDebugTool.AddTickets) {
-      this.ctx.ui.toast(ok ? '抽卡券 +10' : '加券失敗');
+      this.ctx.ui.toast(ok ? `抽卡券 +${this.ticketAdded}` : '加券失敗');
     } else if (ack.toolType === UgcDebugTool.UnlockAll) {
       this.ctx.ui.toast(ok ? '已解鎖全部魚卡 / 場景 / 裝飾物（每張卡碎片 +5）' : '解鎖失敗');
     } else if (ack.toolType === UgcDebugTool.ResetProfile) {
@@ -455,7 +483,7 @@ export class DebugFeature implements GameFeature<GameContext> {
       /** 換場景（同下拉選單；0 森林、1 沙漠、2 雪地、15 空中(黃昏)、6 監獄、4 墓地） */
       scene: (sceneType: number) => this.requestScene(sceneType),
       /** UGC：加抽卡券 / 解鎖全部 / 重置存檔 */
-      tickets: (n = 10) => this.sendUgc(UgcDebugTool.AddTickets, n),
+      tickets: (n = TICKET_DEFAULT) => this.addTickets(n),
       unlockAll: () => this.sendUgc(UgcDebugTool.UnlockAll),
       resetProfile: () => this.sendUgc(UgcDebugTool.ResetProfile),
       /** 切換相機預設（0 = 第一種、1 = 第二種；換場景時會再依場景自動切換） */

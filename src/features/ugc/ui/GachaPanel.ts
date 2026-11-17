@@ -1,6 +1,6 @@
 /** Cinematic summoning. The server remains the sole authority for costs, rolls and inventory. */
 import type { GameContext } from '@game/GameContext';
-import { RARITIES, RARITY_NAME, rarityRank } from '@game/ugc/CardDefine';
+import { RARITIES, RARITY_NAME } from '@game/ugc/CardDefine';
 import { GACHA_COST, GACHA_POOL, GACHA_RARITY_WEIGHT, GACHA_TEN_GUARANTEE, gachaPoolOf, type GachaItem } from '@game/ugc/GachaDefine';
 import type { GachaResult } from '@game/ugc/UgcTypes';
 import type { UgcClient } from '../UgcClient';
@@ -8,8 +8,24 @@ import { SummonEffects } from '../fx/SummonEffects';
 import { Panel } from './Panel';
 import { el, fmt } from './dom';
 import { CARD_FINISH, cardFinish, cardKind, cardName, createSummonCard, resultNote, revealCard } from './SummonCard';
+import './summon-squeeze.css';
 
-type DrawPhase = 'idle' | 'requesting' | 'charging' | 'revealing' | 'complete';
+/** charging = 發牌中、ready = 牌發好了等玩家按、revealing = 翻牌中 */
+type DrawPhase = 'idle' | 'requesting' | 'charging' | 'ready' | 'revealing' | 'complete';
+
+/**
+ * 紫卡（SR）以上的瞇牌節奏（ms，相對輪到這張的時間）：翻牌翻到一半會停住
+ * peeks = 每段翻一點就停住的時間點、windup = 往回收一點蓄力、open = 啪地翻到正面、next = 翻開後多久輪下一張
+ */
+const SQUEEZE = {
+  SR: { peeks: [400, 1080], windup: 1760, open: 1880, next: 820 },
+  SSR: { peeks: [480, 1220, 2080], windup: 3050, open: 3170, next: 2150 },
+} as const;
+/** 一般卡（白 / 藍）依序連翻的間隔 */
+const FLIP_STEP = { N: 260, R: 360 } as const;
+const PEEKS = ['peek-1', 'peek-2', 'peek-3'];
+/** 演出用的暫時 class（跳過 / 結束時全部清掉） */
+const CARD_FX = ['is-squeezing', 'is-windup', 'is-snap', 'just-revealed', 'just-opened', ...PEEKS];
 
 export class GachaPanel {
   readonly panel: Panel;
@@ -17,6 +33,10 @@ export class GachaPanel {
   private readonly stage = el('div', 'summon-stage');
   private readonly status = el('div', 'summon-status');
   private readonly skip = el('button', 'summon-text-button summon-skip', '跳過演出');
+  /** 「點擊翻牌」提示（ready 時蓋在牌上；整個牌區也都可以點） */
+  private readonly tapHint = el('button', 'summon-tap-hint');
+  /** 發牌動畫還沒結束就按了：發完立刻開翻 */
+  private flipQueued = false;
   private readonly sound = el('button', 'summon-text-button', '音效：開');
   private readonly hint = el('span', 'summon-cost-hint');
   private readonly buttons: { times: number; btn: HTMLButtonElement }[] = [];
@@ -52,6 +72,8 @@ export class GachaPanel {
     });
     this.skip.hidden = true;
     this.skip.addEventListener('click', () => this.finish());
+    this.tapHint.type = 'button';
+    this.stage.addEventListener('click', () => this.startFlip());
     const masthead = el('div', 'summon-masthead',
       el('div', 'summon-brand', el('span', 'summon-eyebrow', 'DRAGON SOUL · THE ETERNAL COVENANT'), el('span', 'summon-season', '永恆契約')),
       el('div', 'summon-tools', this.sound, pool));
@@ -78,12 +100,15 @@ export class GachaPanel {
       else if (this.results.length) { this.renderResults(); this.finish(); }
       else this.showWelcome();
       this.refresh(); pool.focus({ preventScroll: true });
-      for (const sound of ['sound/MG_4', 'sound/C_1', 'sound/C_2', 'sound/C_3']) void ctx.audio.load(sound);
+      for (const sound of ['sound/MG_4', 'sound/C_1', 'sound/C_2', 'sound/C_3', 'sound/MG_2', 'sound/L_4']) void ctx.audio.load(sound);
     };
     this.panel.onClose = () => {
       this.closeOverlay();
-      // Closing cancels presentation, not the authoritative request. Reopening keeps the receipt.
-      if (this.phase !== 'requesting' && this.results.length) this.finish();
+      // 關閉只中斷演出，不取消 server 的抽卡。
+      // 結果已經完整看過（complete）→ 清掉，下次打開回首頁；
+      // 還沒看完（翻到一半就關、或結果在關閉期間才回來）→ 保留，下次打開先顯示一次，看過再關才回首頁。
+      if (this.phase === 'complete') { this.results = []; this.cards = []; }
+      else if (this.phase !== 'requesting' && this.results.length) this.finish();
       this.clearTimers(); this.effects.stop();
       this.returnFocus?.focus({ preventScroll: true });
     };
@@ -92,7 +117,7 @@ export class GachaPanel {
     ctx.events.on('ugc:profile', () => this.refresh());
   }
 
-  private get busy(): boolean { return this.phase === 'requesting' || this.phase === 'charging' || this.phase === 'revealing'; }
+  private get busy(): boolean { return this.phase === 'requesting' || this.phase === 'charging' || this.phase === 'ready' || this.phase === 'revealing'; }
 
   private refresh(): void {
     const have = this.ugc.profile?.tickets ?? 0;
@@ -168,39 +193,120 @@ export class GachaPanel {
   }
 
   private beginReveal(): void {
-    this.phase = 'charging'; this.renderResults();
+    this.phase = 'charging'; this.flipQueued = false; this.renderResults();
     this.panel.win.dataset.phase = 'charging'; this.status.textContent = '龍魂正在回應你的契約…';
     this.skip.hidden = false; this.skip.focus({ preventScroll: true }); this.effects.setCharge(1);
     if (this.reduced.matches) { this.finish(); return; }
-    // The highest-rarity reveal comes last, without changing the server receipt order.
-    const order = this.results.map((_, i) => i).sort((a, b) => rarityRank(this.results[a].rarity) - rarityRank(this.results[b].rarity));
-    let at = this.results.length === 1 ? 1400 : 1800;
-    this.later(() => { this.phase = 'revealing'; this.panel.win.dataset.phase = 'revealing'; this.effects.setCharge(.1); }, at - 300);
-    for (const index of order) {
-      const item = this.results[index];
-      if (rarityRank(item.rarity) >= 2) this.later(() => {
-        this.cards[index].classList.add('is-awakening'); this.effects.setCharge(.65);
-        this.status.textContent = item.rarity === 'SSR' ? '傳說的氣息，正在甦醒…' : '史詩龍魂，回應契約…';
-      }, at - 380);
-      this.later(() => this.reveal(index), at);
-      at += item.rarity === 'SSR' ? 1650 : item.rarity === 'SR' ? 1050 : 450;
-    }
-    this.later(() => this.finish(), at + 250);
+    // 發牌動畫（summon-deal，十連最後一張約 1.7 秒）落定後，等玩家按一下才翻
+    this.later(() => this.awaitFlip(), this.results.length === 1 ? 1350 : 1750);
+  }
+
+  /** 牌發好了：單抽按一下翻這張；十連按一下後依序自動翻完 */
+  private awaitFlip(): void {
+    this.phase = 'ready'; this.panel.win.dataset.phase = 'ready'; this.effects.setCharge(.45);
+    if (this.flipQueued) { this.startFlip(); return; }
+    const single = this.results.length === 1;
+    this.tapHint.replaceChildren(el('b', '', single ? '點擊翻牌' : '點擊開始翻牌'), el('small', '', 'TAP TO REVEAL'));
+    this.stage.append(this.tapHint);
+    this.tapHint.focus({ preventScroll: true });
+    this.status.textContent = single ? '點擊卡片翻開' : '按一下，十張依序自動翻開';
+  }
+
+  private startFlip(): void {
+    if (this.phase === 'charging') { this.flipQueued = true; return; }
+    if (this.phase !== 'ready') return;
+    const hadFocus = document.activeElement === this.tapHint;
+    this.tapHint.remove();
+    if (hadFocus) this.skip.focus({ preventScroll: true });
+    this.phase = 'revealing'; this.panel.win.dataset.phase = 'revealing'; this.effects.setCharge(.1);
+    // 依格子順序翻：左上 → 右上，再左下 → 右下（DOM 順序即閱讀順序，窄畫面 3 / 2 欄也一樣）。
+    // 白 / 藍卡噠噠噠連翻；輪到紫卡以上就停下來瞇牌。
+    let at = 80;
+    this.results.forEach((item, index) => {
+      if (item.rarity !== 'SR' && item.rarity !== 'SSR') {
+        this.later(() => this.reveal(index), at);
+        at += FLIP_STEP[item.rarity];
+        return;
+      }
+      const beat = SQUEEZE[item.rarity];
+      this.later(() => this.beginSqueeze(index), at);
+      beat.peeks.forEach((t, step) => this.later(() => this.peek(index, step), at + t));
+      this.later(() => this.windup(index), at + beat.windup);
+      this.later(() => this.reveal(index), at + beat.open);
+      at += beat.open + beat.next;
+    });
+    this.later(() => this.finish(), at + 600);
+  }
+
+  private get grid(): HTMLElement | null { return this.stage.querySelector('.summon-result-grid'); }
+
+  /** 瞇牌開始：其他卡壓暗、這張浮起，卡色光從卡底滲出 */
+  private beginSqueeze(index: number): void {
+    const item = this.results[index], card = this.cards[index];
+    if (!item || !card) return;
+    const ssr = item.rarity === 'SSR';
+    this.keepVisible(card);
+    card.classList.add('is-squeezing');
+    this.grid?.classList.add('is-focusing');
+    this.effects.aim(cardFinish(item), card); this.effects.setCharge(ssr ? .75 : .55);
+    this.status.textContent = ssr ? '……！這股氣息是' : '……卡底透出了光';
+    this.play('sound/L_4', ssr ? .5 : .35);
+  }
+
+  /** 翻一點就停住；越翻越多、越抖、光越亮 */
+  private peek(index: number, step: number): void {
+    const item = this.results[index], card = this.cards[index];
+    if (!item || !card) return;
+    const ssr = item.rarity === 'SSR';
+    card.classList.remove(...PEEKS); card.classList.add(PEEKS[step]);
+    this.effects.setCharge((ssr ? .8 : .6) + step * .12);
+    const glow = `${CARD_FINISH[cardFinish(item)].label}的光芒，從卡底溢出…`;
+    this.status.textContent = (ssr ? [glow, '傳說的氣息，正在甦醒…', '就是現在——'] : [glow, '史詩龍魂，回應契約…'])[step];
+    this.play('sound/MG_2', .3 + step * .15);
+  }
+
+  /** 往回收一點蓄力、光一收（吸氣），下一拍啪地翻開 */
+  private windup(index: number): void {
+    const card = this.cards[index];
+    if (!card) return;
+    card.classList.remove(...PEEKS); card.classList.add('is-windup');
+    this.effects.setCharge(0);
   }
 
   private reveal(index: number): void {
     const item = this.results[index], card = this.cards[index];
     if (!item || !card) return;
-    this.revealed++; revealCard(card, item);
-    card.classList.remove('is-awakening'); card.classList.add('just-revealed');
+    const squeezed = card.classList.contains('is-squeezing');
+    this.revealed++;
+    if (squeezed) { card.classList.remove('is-squeezing', 'is-windup', ...PEEKS); card.classList.add('is-snap', 'just-opened'); }
+    else { this.keepVisible(card); card.classList.add('just-revealed'); }
+    revealCard(card, item);
     this.effects.burst(cardFinish(item), card); this.effects.setCharge(0);
     this.status.textContent = `${this.revealed} / ${this.results.length} · ${RARITY_NAME[item.rarity]} ${cardName(item)}`;
     if (item.rarity === 'SSR') {
-      this.play('sound/C_3', .6);
-      this.panel.win.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(3px)' }, { transform: 'translateX(0)' }], { duration: 340 });
-      this.showLegend(item);
-    } else this.play(item.rarity === 'SR' ? 'sound/C_2' : 'sound/C_1', item.rarity === 'SR' ? .45 : .23);
-    this.later(() => card.classList.remove('just-revealed'), 1000);
+      this.play('sound/C_3', .7); this.shake(6, 460);
+      // 先讓人看到翻開的那一下，再拉中央特寫
+      this.later(() => this.showLegend(item), squeezed ? 520 : 0);
+    } else if (item.rarity === 'SR') { this.play('sound/C_2', .55); this.shake(3, 260); }
+    else this.play('sound/C_1', item.rarity === 'R' ? .3 : .23);
+    this.later(() => card.classList.remove('just-revealed', 'just-opened'), 1000);
+    if (squeezed) this.later(() => this.grid?.classList.remove('is-focusing'), item.rarity === 'SSR' ? 2000 : 700);
+  }
+
+  private shake(px: number, ms: number): void {
+    const at = (x: number, y: number) => ({ transform: `translate(${x}px,${y}px)` });
+    this.panel.win.animate([at(0, 0), at(-px, px * .4), at(px, -px * .4), at(-px * .5, px * .2), at(0, 0)], { duration: ms, easing: 'ease-out' });
+  }
+
+  /** 窄畫面十連可捲動：輪到的卡捲進可視範圍 */
+  private keepVisible(card: HTMLElement): void {
+    const grid = this.grid;
+    if (!grid || grid.scrollHeight <= grid.clientHeight + 1) return;
+    const g = grid.getBoundingClientRect(), c = card.getBoundingClientRect();
+    const k = grid.clientHeight / (g.height || 1); // 螢幕 px → 版面 px（UI 依 designScale 縮放）
+    const pad = 14;
+    if (c.top < g.top + pad) grid.scrollBy({ top: (c.top - g.top - pad) * k, behavior: 'smooth' });
+    else if (c.bottom > g.bottom - pad) grid.scrollBy({ top: (c.bottom - g.bottom + pad) * k, behavior: 'smooth' });
   }
 
   private showLegend(item: GachaItem): void {
@@ -223,9 +329,11 @@ export class GachaPanel {
 
   private finish(): void {
     if (this.phase === 'requesting' || !this.results.length) return;
-    const focusSkip = document.activeElement === this.skip;
+    const focusSkip = document.activeElement === this.skip || document.activeElement === this.tapHint;
+    this.tapHint.remove();
     this.clearTimers(); this.phase = 'complete'; this.panel.win.dataset.phase = 'complete';
-    this.cards.forEach((card, i) => { revealCard(card, this.results[i]); card.classList.remove('is-awakening', 'just-revealed'); });
+    this.cards.forEach((card, i) => { revealCard(card, this.results[i]); card.classList.remove(...CARD_FX); });
+    this.grid?.classList.remove('is-focusing');
     this.stage.querySelectorAll('.summon-spotlight, .summon-legend').forEach(x => x.remove());
     this.skip.hidden = true; this.effects.setCharge(0); this.effects.setCards(this.cards);
     const fresh = this.results.filter(r => r.isNew).length;
