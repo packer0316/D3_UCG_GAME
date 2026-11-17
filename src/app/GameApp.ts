@@ -35,6 +35,7 @@ import { KillShowRegistry } from '@game/show/KillShowRegistry';
 import { CameraShake } from '@game/world/CameraShake';
 import { FishClassRegistry } from '@game/world/FishClassRegistry';
 import { PlayField } from '@game/world/PlayField';
+import { CameraControl } from '@game/world/CameraControl';
 import { registerFishClasses } from '@game/world/fishes';
 import { FakeServer } from '@server-fake/FakeServer';
 import { createLocalTransportPair } from '@server-fake/LocalTransport';
@@ -141,7 +142,9 @@ export class GameApp {
       ui,
     };
 
-    services.register(Tokens.PlayField, new PlayField());
+    const playField = new PlayField();
+    services.register(Tokens.PlayField, playField);
+    services.register(Tokens.CameraControl, new CameraControl(stage, playField, events));
     const seat = new SeatSystem(this.ctx);
     this.fishSystem = new FishSystem(this.ctx);
     this.scene = new SceneSystem(this.ctx);

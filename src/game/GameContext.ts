@@ -47,6 +47,8 @@ export interface GameEvents {
   'ai:change': { active: boolean; shotsLeft: number };
   /** 場景改變（原版 EVENT_SCENE_CHANGE；進房第一次也會送） */
   'scene:change': { sceneType: number };
+  /** 相機預設改變（場景自動切換 / debug 手動切換；CameraPresetId） */
+  'camera:change': { preset: number };
 }
 
 export interface GameLayers {

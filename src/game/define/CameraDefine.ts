@@ -1,9 +1,10 @@
 /**
- * Debug 相機預設（debug 面板「相機」區切換）。
- * 新增：在陣列後面加一筆；面板上調好數值後按「複製設定」可直接貼過來。
+ * 相機預設（SPEC §16.4）：場景依 SceneDefine.camera 自動切換；debug 面板「相機」區也可手動切換。
+ * 新增：在陣列後面加一筆；debug 面板調好數值後按「複製設定」可直接貼過來。
  */
 import type { Vec2 } from '@core/math/cocos';
 import type { CameraSetting } from '@engine/stage/Stage';
+import { FIXED_3D_CAMERA } from './DisplayDefine';
 
 export interface CameraPreset {
   name: string;
@@ -13,19 +14,27 @@ export interface CameraPreset {
    * 牆要配合相機：原版牆 = 畫面底邊兩角 ~ 畫面 78% 高度投到地面（設計寬 1136），砲台要在牆內。
    */
   wall?: Vec2[];
+  /**
+   * Iris 轉場範圍（view space 距離）；省略 = IRIS_TRANSITION.range（400，原版）。
+   * 轉場以相機為中心由近到遠擴散，超過範圍的部分要等轉場結束才一次出現 → 看得較遠的相機要放大。
+   */
+  irisRange?: number;
 }
 
-export const CAMERA_PRESETS: CameraPreset[] = [
+/** CAMERA_PRESETS 的索引 */
+export const CameraPresetId = {
+  /** 第一種：原版遊戲相機 */
+  Default: 0,
+  /** 第二種：殭屍專案監獄視角（監獄 / 墓地場景使用） */
+  Zombie: 1,
+} as const;
+export type CameraPresetIdValue = (typeof CameraPresetId)[keyof typeof CameraPresetId];
+
+export const CAMERA_PRESETS: readonly CameraPreset[] = [
   {
-    // 目前的遊戲相機（= 原版 Fixed3DCamDef，DisplayDefine FIXED_3D_CAMERA）
+    // 原版 Fixed3DCamDef（DisplayDefine FIXED_3D_CAMERA）；舞台建立時就是這台
     name: '第一種',
-    setting: {
-      fov: 33,
-      near: 10,
-      far: 5000,
-      position: { x: 0, y: -104, z: 95 },
-      rotation: { x: 60, y: 0, z: 0 },
-    },
+    setting: FIXED_3D_CAMERA,
   },
   {
     // 殭屍專案（TMDC_Zombie）監獄場景的遊戲中視角：視野較廣、看得較遠、角度較平。
@@ -47,5 +56,7 @@ export const CAMERA_PRESETS: CameraPreset[] = [
       { x: 270, y: 380 },
       { x: 76, y: -59 },
     ],
+    // 監獄後牆 / 墓地遠景距相機約 730–800
+    irisRange: 800,
   },
 ];

@@ -15,6 +15,7 @@ import {
   COMMON_RES_ROOT,
   INANNA_RES_ROOT,
   LUA_SOURCE_ROOT,
+  ZOMBIE_RES_ROOT,
   groups,
 } from './asset-manifest.mjs';
 import { convertFishEfkSetting, parseSoundTable } from './lib/fish-efk.mjs';
@@ -29,8 +30,9 @@ const CSD_SRC = resolve(CSD_SOURCE_ROOT);
 const COMMON_CSD_SRC = resolve(COMMON_CSD_SOURCE_ROOT);
 const COMMON_RES = resolve(COMMON_RES_ROOT);
 const INANNA_RES = resolve(INANNA_RES_ROOT);
+const ZOMBIE_RES = resolve(ZOMBIE_RES_ROOT);
 /** 資源根目錄（目的地路徑 = 相對於所屬根目錄） */
-const RES_ROOTS = [SRC, COMMON_RES, INANNA_RES];
+const RES_ROOTS = [SRC, COMMON_RES, INANNA_RES, ZOMBIE_RES];
 
 if (!existsSync(SRC)) {
   console.error(`找不到原版資源目錄：${SRC}\n請設定環境變數 D3_SRC`);
@@ -64,9 +66,9 @@ function findByBasename(name) {
   return basenameIndex.get(name.toLowerCase()) ?? [];
 }
 
-function expand(pattern) {
-  if (!pattern.includes('*')) return [join(SRC, pattern)];
-  const dir = join(SRC, posix.dirname(pattern));
+function expand(pattern, root = SRC) {
+  if (!pattern.includes('*')) return [join(root, pattern)];
+  const dir = join(root, posix.dirname(pattern));
   const re = new RegExp('^' + posix.basename(pattern).replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$', 'i');
   if (!existsSync(dir)) return [];
   return readdirSync(dir, { withFileTypes: true })
@@ -387,6 +389,12 @@ for (const [group, list] of Object.entries(groups)) {
     }
     if (pattern.startsWith('inanna:')) {
       process_(join(INANNA_RES, pattern.slice('inanna:'.length)));
+      continue;
+    }
+    if (pattern.startsWith('zombie:')) {
+      const files = expand(pattern.slice('zombie:'.length), ZOMBIE_RES);
+      if (files.length === 0) missing.push(`${pattern}  (manifest:${group})`);
+      for (const f of files) process_(f);
       continue;
     }
     const files = expand(pattern);

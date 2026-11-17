@@ -7,7 +7,7 @@ import { BULLET_DATA } from '../src/game/define/BulletDefine';
 import { CANNON_LIMIT_ANGLE, SEAT_ANCHORS } from '../src/game/define/CannonDefine';
 import { NormalBullet } from '../src/game/bullet/NormalBullet';
 import type { EfkSystem } from '../src/engine/effekseer/EfkSystem';
-import { CAMERA_PRESETS } from '../src/features/debug/CameraPresets';
+import { CAMERA_PRESETS } from '../src/game/define/CameraDefine';
 
 describe('circleHitsPolygonEdge 法線方向', () => {
   const ccwWall = [...WALL_POLYGON].reverse();

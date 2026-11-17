@@ -4,7 +4,8 @@
  *   B「召喚腳本魚」（TestSummonContent / TestSummonUI）：篩選框 + 「<groupId>-<名稱>」列表，送 toolType 2
  *   C「切換場景」（CommonTestContent:TestChangeSceneType）：下拉選單選場景，送 toolType 100 由 server 換場景（SPEC §15.5）
  *     召喚列表中限定其他場景的魚（風神翼龍 / 蒼龍只在空中(黃昏)）反灰
- *   D「相機」：切換相機預設（CameraPresets）、即時調整 FOV / 位置 / 角度、複製設定
+ *   D「相機」：切換相機預設（CameraDefine，經 CameraControl）、即時調整 FOV / 位置 / 角度、複製設定；
+ *     換場景時相機會依場景自動切換（SPEC §16.4），面板跟著 camera:change 同步
  * 只透過 GameContext / NetClient 存取遊戲（Feature 擴充機制的範例）。
  */
 import type { GameFeature } from '@core/feature/Feature';
@@ -15,11 +16,11 @@ import { Tokens } from '@game/Tokens';
 import { isFishSupported } from '@game/define/FishDefine';
 import { WALL_POLYGON } from '@game/define/DisplayDefine';
 import { SCENE_DEFINES, SCENE_LIST, SceneType, sceneLimitLabel } from '@game/define/SceneDefine';
+import { CAMERA_PRESETS } from '@game/define/CameraDefine';
 import type { Fish } from '@game/world/Fish';
 import { DebugErrorCode, DebugToolType } from '@net/protocol';
 import type { FakeServer } from '@server-fake/FakeServer';
 import { buildSummonList, type SummonEntry } from './SummonList';
-import { CAMERA_PRESETS } from './CameraPresets';
 import './debug.css';
 
 /** 相機欄位 → CameraSetting 對應 */
@@ -105,6 +106,13 @@ export class DebugFeature implements GameFeature<GameContext> {
     ctx.events.on('scene:change', () => {
       this.renderScene();
       this.renderList();
+    });
+    // 相機預設改變（場景自動切換 / 預設按鈕）：欄位與按鈕高亮跟著換
+    ctx.events.on('camera:change', ({ preset }) => {
+      const p = CAMERA_PRESETS[preset];
+      if (!p) return;
+      this.cam = cloneCam(p.setting);
+      this.renderCamera();
     });
     this.renderCheat();
     this.renderScene();
@@ -241,23 +249,19 @@ export class DebugFeature implements GameFeature<GameContext> {
     };
   }
 
+  /** 相機 + 子彈牆一起換（CameraControl）；面板由 camera:change 同步 */
   private applyCameraPreset(idx: number): boolean {
-    const preset = CAMERA_PRESETS[idx];
-    if (!preset) return false;
-    this.cam = cloneCam(preset.setting);
-    this.ctx.stage.applyCamera(this.cam);
-    // 子彈牆跟著相機換（手動微調數值時沿用目前預設的牆）
-    this.ctx.services.get(Tokens.PlayField).wall = preset.wall ?? WALL_POLYGON;
-    this.renderCamera();
-    this.ctx.ui.toast(`相機：${preset.name}`);
+    if (!this.ctx.services.get(Tokens.CameraControl).applyPreset(idx)) return false;
+    this.ctx.ui.toast(`相機：${CAMERA_PRESETS[idx].name}`);
     return true;
   }
 
+  /** 手動微調：只換相機，牆沿用目前預設的 */
   private onCamInput(input: HTMLInputElement): void {
     const v = input.valueAsNumber;
     if (!Number.isFinite(v)) return;
     CAM_FIELDS[input.dataset.cam!](this.cam, v);
-    this.ctx.stage.applyCamera(this.cam);
+    this.ctx.services.get(Tokens.CameraControl).applyCustom(cloneCam(this.cam));
     this.renderCameraPresets();
   }
 
@@ -279,7 +283,7 @@ export class DebugFeature implements GameFeature<GameContext> {
       ).join('') + (cur < 0 ? '<span class="dbg-tag">自訂</span>' : '');
   }
 
-  /** 複製成 CAMERA_PRESETS 的一筆（貼到 CameraPresets.ts 即可新增預設） */
+  /** 複製成 CAMERA_PRESETS 的一筆（貼到 game/define/CameraDefine.ts 即可新增預設） */
   private copyCamera(): void {
     const c = this.cam;
     const wall = this.ctx.services.get(Tokens.PlayField).wall;
@@ -321,9 +325,9 @@ export class DebugFeature implements GameFeature<GameContext> {
       },
       cheat: (on: boolean) => this.send(DebugToolType.CheatMode, on ? 1 : 0),
       summon: (groupId: number) => this.send(DebugToolType.Summon, groupId),
-      /** 換場景（同下拉選單；0 森林、1 沙漠、2 雪地、15 空中(黃昏)） */
+      /** 換場景（同下拉選單；0 森林、1 沙漠、2 雪地、15 空中(黃昏)、6 監獄、4 墓地） */
       scene: (sceneType: number) => this.requestScene(sceneType),
-      /** 切換相機預設（0 = 第一種） */
+      /** 切換相機預設（0 = 第一種、1 = 第二種；換場景時會再依場景自動切換） */
       camera: (idx: number) => this.applyCameraPreset(idx),
       /** 對場上第一隻符合條件的魚模擬一則 server 擊殺通知 */
       kill: (fishType: number, showType: number, unDead = false, odds = 100) => {

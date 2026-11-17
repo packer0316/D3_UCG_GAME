@@ -28,7 +28,7 @@
 
 - BossShow 全部（`BossShowLayer` 系列）→ 依 §7.2 **降級為小獎**
 - 特殊子彈（Grenade / Plasma / Laser）、鎖定射擊、道具掉落（`Reward_Item`）、HitMore、Overlay 大獎
-- 換場景 / 轉場（Iris / Cloud）、天空場景（→ §15 已加入：debug 換場景、Iris、空中(黃昏)；雲層轉場仍未做）
+- 換場景 / 轉場（Iris / Cloud）、天空場景（→ §15 已加入：debug 換場景、Iris、空中(黃昏)；§16 加入殭屍專案 監獄 / 墓地；雲層轉場仍未做）
 - 真實 Server、帳號、多人同步（其他座位顯示「等待加入」）
 - **抽卡（Gacha）** → 下一階段，以 Feature 外掛方式加入（§10）
 
@@ -519,6 +519,7 @@ interface GameFeature {
 | M5 | HUD、自動、音效、debug 面板 | 畫面接近附圖 | ✅ |
 | M6 | 魚種 15–17、22–28 + 魚身 EFK（§14） | 召喚每個群組都能正常走完路徑、可打、可擊殺 | ✅ |
 | M7 | debug 場景下拉選單、空中(黃昏) 場景、場景限定魚種（§15） | 天空 flowmap 流動、轉場雙向正常；風神 / 蒼龍只在空中(黃昏) 出現與召喚 | ✅ |
+| M8 | 殭屍專案 監獄 / 墓地 場景、依場景自動切換相機（§16） | 兩場景材質正確（墓地雲 / 月亮流動）、監獄門牆掛件；切到監獄 / 墓地相機自動換第二種、其他第一種；轉場不露底色 | ✅ |
 
 ---
 
@@ -828,7 +829,8 @@ interface GameFeature {
    - `SceneSystem`：換場景（`BGScene.change`）、更新魚影顏色（有定義時）、魚影開關（Sky → 隱藏，原版 `FishBase:update` `SetShadowDisable(GetSceneInSky())`）、BGM 不同才換、送 `scene:change` 事件。
      BGM 全部由 `SceneSystem` 依場景播放（原本 `GameApp` 進房固定播 `BGM_Normal`，已移除）。
    - `FishSystem`：清場（timeline 全部結束 → 魚直接移除、不播死亡表演；死亡表演中的魚照常播完）。
-4. 轉場：Ground ↔ Ground 維持圓形擴散（Iris）。有天空的一方不套 Iris（天空在背景、整段可見）：
+4. 轉場：圓形擴散（Iris）。有天空的一方不套 Iris（天空在背景、整段可見）：
+   - 地面 → 地面：新場景以 Iris 淡入，**蓋在舊場景上**（§16.4 改版：舊場景不再同時淡出，改在主場景之前用換相機前的相機完整畫出）。
    - 地面 → 天空：天空立即顯示，地面以 Iris 淡出（由近到遠消失，露出後面的天空）。
    - 天空 → 地面：地面以 Iris 淡入蓋過天空，結束後天空隱藏。
    原版天空場景是「雲層轉場」（`CloudTransitionChangeScene`：剪影飛過 + CSB 雲層 + 鎖按鈕 / 射擊），本階段不做。
@@ -838,7 +840,7 @@ interface GameFeature {
 | 魚種 | 可出現的場景 | 群組 |
 |---|---|---|
 | 26 風神翼龍、27 翔空蒼龍、28 蒼龍翅膀 | 只有 空中(黃昏) | 37 / 58、57 / 66 |
-| 23 樹精哥布林、24 帝王暴龍、25 遠古巨蠍 | 只有 地面場景（森林 / 沙漠 / 雪地） | 33 / 34、35、36（含 ★ 版本） |
+| 23 樹精哥布林、24 帝王暴龍、25 遠古巨蠍 | 只有 地面場景（state = Ground：森林 / 沙漠 / 雪地 / 監獄 / 墓地，§16） | 33 / 34、35、36（含 ★ 版本） |
 
 - 原版每隻 Boss 綁自己的 Boss 場景；天空 Boss 只在空中(黃昏) 是需求，地面 Boss 不進天空是對應的反向規則。其他魚種不限。
 - 群組內**所有**魚種都允許才可出現（`isGroupAllowedInScene`）。
@@ -863,3 +865,96 @@ interface GameFeature {
 | 天空中的砲台 EFK | 原版 `CannonDefine` 的 `SceneState.Sky` 特效 |
 | 變天演出 | `u_Switch` keyframe（蒼龍 Stage_Change），設定已保留 |
 | Boss_Sky（13）、Boss_Sky2（14）等其他場景 | 未移植 |
+
+---
+
+## 16. 殭屍專案場景：監獄、墓地 + 依場景自動切換相機
+
+> 來源：殭屍專案（`TMDC_Zombie/ClientCocos`）`Define/SceneDefine.lua`、`View/GameView/BGSceneLayer.lua`、
+> `View/GameView/BGScene/GameSceneBase.lua`、`GameScenePrison/*`、`GameSceneCemetery/*`、
+> `ZombieResource/Shader/ground.material`（technique `PrisonScene` / `CemeteryScene`）、`prisonScene.frag`、`cemeteryScene.frag`
+
+### 16.1 場景表（接續 §15.1）
+
+| SceneType | 名稱 | 模型 | 縮放 | 陰影色 | 相機 | BGM |
+|---|---|---|---|---|---|---|
+| **6 ZB_Prison** | **監獄** | `Models/Scene_ZB/Prison/Prison.c3b` | 0.1 | (0.12, 0.10, 0.08) | **第二種** | `bgm/BGM_Normal` |
+| **4 ZB_Cemetery** | **墓地** | `Models/Scene_ZB/Cemetery/Cemetery.c3b` | 0.1 | (0.08, 0.05, 0.11) | **第二種** | `bgm/BGM_Normal` |
+
+- SceneType 沿用殭屍專案的值（Cemetery = 4、Prison = 6）；DT3 的 SceneType 沒有用到 3–9，不會衝突。
+- `SCENE_LIST`（預載、debug 下拉選單順序）：森林 → 沙漠 → 雪地 → 空中(黃昏) → 監獄 → 墓地。
+- 兩者 `state = Ground`；BGM 暫用 DT3 的 `BGM_Normal`（殭屍專案的 BGM 未複製）。
+- 資源：`tools/asset-manifest.mjs` 新增 `zombie:<路徑>`（根目錄 `ZOMBIE_RES_ROOT`，預設 `TMDC_Zombie/ClientCocos/ZombieResource`），
+  輸出到 `public/res/<路徑>`（`Models/Scene_ZB/...` 與 DT3 路徑不重疊）。
+- SceneDefine 新增欄位：
+  - `scale`：模型縮放（殭屍場景 0.1；同原版 `setScale` **覆寫** c3b 節點帶給根節點的縮放）
+  - `camera`：相機預設 id（§16.4；省略 = 第一種）
+  - `shader`：場景 shader（`'prison'` / `'cemetery'`，§16.2；省略 = 一般場景材質）
+  - `pose`：靜態姿勢（`reset` 動畫 0–1 影格；殭屍場景 `OnSceneEnter` 都會 `PlayAnim("reset")`）
+  - `attachments`：掛件模型（§16.3）
+
+### 16.2 場景材質
+
+`SceneMaterial` 改為依變體組 shader：`default`（sceneTest）/ `flow`（skybox，§15.2）/ `prison` / `cemetery`。
+每個變體都先做 Iris 判斷（§15.3），再算顏色；uv 一律在 Cocos 座標（`y = 1 − v`）計算，取樣時轉回 three 座標（同 §15.2）。
+只有 `default` 做 alpha < 0.3 discard（`alpha_scene.frag`）；殭屍兩支 shader 沒有 discard。
+
+**監獄**（`prisonScene.frag`，套在 mesh `Prison`；`GameScenePrison:InitShaderShow`）
+- 貼圖：`Main_Tex` = 模型本身的 `Prison.jpg`、`Depth_Tex` = `Prison_Depth.jpg`、`Mask_Tex` = `light_mask.jpg`、`Noise_Tex1` = `Noise_22.png`（全部 REPEAT）。
+- 逐行翻譯：R 燈 `sin(time × speed)` 呼吸、G/B 燈 noise 流動 `step(0.5)` 閃爍、`Depth_POS` 依深度圖暗場溶解。
+- 平常（idle）= `BaseUniforms` + `CloseUniforms`：`Depth_POS 3`、三色燈強度 0、呼吸速度 0、`G_B_light 0` → 燈全關、整場亮。
+  典獄長的燈光 / 暗場時間軸（`PrisonIngameTimeline` / `PrisonOutTimeline`）不在本階段（沒有典獄長）。
+
+**墓地**（`cemeteryScene.frag`，套在 mesh `Cemetery_floor`；`GameSceneCemetery:InitShaderShow`）
+- 貼圖：主圖 = 模型本身的 `Cemetery.jpg`、`Mask_Tex` = `Cemetery_mask.jpg`（REPEAT）、`Noise_Tex` = `Common/sceneNoisePair.png`（R/G 兩張 noise，REPEAT）、
+  `Moon_Tex` = `redMoon.png`（CLAMP）。
+- 逐行翻譯：雲、霧氣流動、地面擾動、月亮圓盤與光暈、四角暈影；uniform 預設值 = `GameSceneCemeteryDefine.ShaderShow.BaseUniforms`。
+- 紅月（`MoonSwitchTimeline`，每次進場演一輪）：`Moon_Switch.x` 0 → 1（40 秒，線性）→ 停 2 秒 → 1 → 0（168 秒）→ 之後固定 0。
+  Boss 版時間軸（`MoonSwitchTimeline_Boss`）與後進房對齊剩餘秒數（`OnSyncSceneRemainTime`）不做。
+- 時間：`BGScene.update(dt)` 累加，更新所有會動的材質（天空 / 監獄 / 墓地）。
+
+### 16.3 監獄掛件（`GameScenePrisonDefine.ExtensionModel`）
+
+| 名稱 | 模型 | 掛點 | 旋轉 | 縮放 | 姿勢 |
+|---|---|---|---|---|---|
+| Wall | `Break_wall.c3b` | 場景根節點 | (0, 0, 0) | 1 | `idle`（0–1 影格） |
+| DoorL × 6 | `DOOR_ALL.c3b` | 骨骼 `Door_001` ~ `Door_006` | (90, 0, 0) | 1 | `Close` 播完（50 影格） |
+| DoorR × 6 | `DOOR_ALL.c3b` | 骨骼 `Door_007` ~ `Door_012` | (90, 0, 0) | 1 | `Close` 播完（100 影格） |
+
+- 旋轉 / 縮放同原版 `CreateExtensionModel` 一律**覆寫**：`Break_wall.c3b` 的 mesh 節點自帶縮放 100，
+  不覆寫會被放大 100 倍飛出畫面（實際位置：監獄右側牆前段 x ≈ 102–119、y ≈ 27–122）。
+- 掛件用一般場景材質（`default`），一起參與 Iris 轉場。
+- 魚靠近自動開關門（`UpdateDoor`）、破牆（`PRISON_BREAK_WALL`）都屬典獄長演出，本階段不做 → 門固定關閉、牆固定顯示。
+
+### 16.4 依場景自動切換相機
+
+- 相機預設從 `features/debug/CameraPresets.ts` 移到 `game/define/CameraDefine.ts`（遊戲邏輯會用到）：
+  - `CameraPresetId.Default`（0，第一種）= 原版 `Fixed3DCamDef`（`FIXED_3D_CAMERA`），牆 = `WALL_POLYGON`
+  - `CameraPresetId.Zombie`（1，第二種）= 殭屍專案監獄 `Camera001` 骨骼視角，牆另訂（見 `CameraDefine.ts`）
+- 新增 `CameraControl`（service `Tokens.CameraControl`）：`applyPreset(id)` = `stage.applyCamera` + `PlayField.wall` 一起換，送 `camera:change` 事件；
+  `applyCustom(setting)` = debug 微調（只換相機、牆沿用）。
+- `SceneSystem.change()`：依 `SceneDefine.camera`（省略 = 第一種）切換；**監獄、墓地 → 第二種，其他場景 → 第一種**。
+  - 時機：收到換場景通知的當下（同時清場）；進房第一次直接套用。
+  - 與目前相同就不重套；debug 手動微調過（預設 = −1）→ 換場景時一律套回該場景的預設。
+  - 殭屍專案的相機是每幀跟隨場景骨骼（`CameraAttachBone`），本版直接用固定預設（第二種 = 監獄 `Camera001` 在 reset 時的姿勢；墓地也用同一台）。
+- Debug 面板「相機」區：預設按鈕改呼叫 `CameraControl`；收到 `camera:change` 時同步欄位與按鈕高亮。
+- **換相機時的轉場**（`BGScene.iris`）：
+  - 原版 Iris 是舊場景淡出（u_mul −1）、新場景淡入（u_mul 1）同時進行，各自依「自己的幾何到相機的距離」判斷。
+    換相機後舊場景從新相機看形狀對不上、甚至蓋不滿畫面（雪地從第二種相機看，上方是空的）→ 轉場中露出底色。
+  - 改為**新場景蓋在舊場景上**：舊場景移到另一個 THREE.Scene，由 `bg-prev-scene` pass（order 90，World3D 之前）
+    以**換相機前的相機快照**完整畫出、清深度；主場景裡新場景 Iris 淡入（由近到遠長出來）。畫面上每一點不是新場景就是舊場景。
+    相機沒換時用目前相機畫，結果與原版相同（兩場景形狀一致）。
+  - 新場景是天空時維持 §15.3（舊地面淡出露出背景天空）。
+  - Iris 範圍跟著新相機：`CameraPreset.irisRange`（第一種省略 = 400，原版；第二種 800 —— 監獄後牆 / 墓地遠景距相機約 730–800，
+    用 400 的話超過的部分要等轉場結束才一次跳出來）。
+
+### 16.5 本階段不做
+
+| 項目 | 說明 |
+|---|---|
+| 殭屍專案轉場 | 殭屍專案一律用 Spine 轉場（`ZombieSpineChangeScene`），本版維持 Iris |
+| 相機跟隨骨骼 / 運鏡 | `AttachCamera`、開場 `ingame` 運鏡、監獄大獎運鏡（`big_reward_out_*`） |
+| 場景演出 | 監獄燈光 / 暗場時間軸、開關門、破牆；墓地 `ingame` 墓碑演出、Boss 紅月時間軸 |
+| 地板倒影 | `FishFloorReflection`（監獄） |
+| 魚的 MatCap / 監獄囚衣貼圖 | 殭屍專案 `ModelMgr:setMatCapTexture`、`PrisonScene_Sprite3d_Texture`（DT3 魚種不適用） |
+| 魚可見範圍 | `FishVisibleZoneMgr` / `SceneVisibleRectDefine` |

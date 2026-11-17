@@ -27,12 +27,25 @@ export const LUA_SOURCE_ROOT =
 export const INANNA_RES_ROOT =
   process.env.D3_INANNA_RES ?? 'D:/GIT_TMD/Git_1/Inanna/InannaResource/Inanna';
 
+/** 殭屍專案資源（監獄 / 墓地場景，SPEC §16）：以 "zombie:<路徑>" 列在 groups 內（可含 *），輸出到 public/res/<路徑> */
+export const ZOMBIE_RES_ROOT =
+  process.env.D3_ZOMBIE_RES ?? 'D:/GIT_TMD/Git_1/TMDC_Zombie/ClientCocos/ZombieResource';
+
 export const groups = {
   data: ['Data/PathData.json', 'Data/GroupData.json', 'Data/FishData.json'],
 
   // 地面場景：森林 / 沙漠 / 雪地（SceneDefine Forest / Desert / Snow）
   // 空中(黃昏)：Boss_Sky_Dusk（Scene_sky.c3b + flowmap SceneB01_flow.png，SPEC §15）
   scene: ['Models/Scene/Scene01/*', 'Models/Scene/Scene02/*', 'Models/Scene/Scene03/*', 'Models/Scene/Scene06/*'],
+
+  // 殭屍專案場景（SPEC §16）：監獄（場景 + 牆 / 門掛件 + PrisonScene shader 貼圖）、墓地（CemeteryScene shader 貼圖）
+  zombieScene: [
+    'zombie:Models/Scene_ZB/Prison/*',
+    'zombie:Models/Scene_ZB/Cemetery/Cemetery.c3b',
+    'zombie:Models/Scene_ZB/Cemetery/Cemetery_mask.jpg',
+    'zombie:Models/Scene_ZB/Cemetery/redMoon.png',
+    'zombie:Models/Scene_ZB/Common/sceneNoisePair.png',
+  ],
 
   fish: [
     // 1-11
