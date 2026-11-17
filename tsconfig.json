@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "useDefineForClassFields": true,
+    "noEmit": true,
+    "paths": {
+      "@core/*": ["./src/core/*"],
+      "@engine/*": ["./src/engine/*"],
+      "@game/*": ["./src/game/*"],
+      "@net/*": ["./src/net/*"],
+      "@server-fake/*": ["./src/server-fake/*"],
+      "@ui/*": ["./src/ui/*"],
+      "@features/*": ["./src/features/*"],
+      "@app/*": ["./src/app/*"]
+    }
+  },
+  "include": ["src", "tests"]
+}
