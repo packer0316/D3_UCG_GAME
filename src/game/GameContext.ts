@@ -43,6 +43,8 @@ export interface GameEvents {
   'skill:change': { bulletType: SpecialBulletTypeId; auto: boolean; active: SkillButtonId[] };
   /** 鎖定目標改變 */
   'lock:change': { fish: Fish | null };
+  /** 自動（AIAuto）狀態改變；shotsLeft -1 = 不限 */
+  'ai:change': { active: boolean; shotsLeft: number };
 }
 
 export interface GameLayers {

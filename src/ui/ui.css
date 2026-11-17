@@ -22,113 +22,29 @@
   pointer-events: auto;
 }
 
-/* ---------------- 座位面板 ---------------- */
-.seat-panel {
+/* ---------------- 座位面板（SeatInfo.csd，CsdDom） ---------------- */
+.seat-info {
   position: absolute;
-  bottom: 0;
   width: 0;
   height: 0;
 }
-.seat-money {
-  position: absolute;
-  left: -95px;
-  bottom: 6px;
-  width: 189px;
-  height: 36px;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 12px 0 34px;
-  border-radius: 8px;
-  background: linear-gradient(#1b2433, #0c111b);
-  border: 2px solid #8a7340;
-  box-shadow: inset 0 0 6px #000, 0 2px 4px rgba(0, 0, 0, 0.5);
-  color: #ffd84a;
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: 0.5px;
-  text-shadow: 0 1px 0 #6b4a00, 0 0 4px rgba(0, 0, 0, 0.8);
-}
-.seat-coin {
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  transform: translateY(-50%) scale(0.56);
-  transform-origin: left center;
-}
-.seat-bet {
-  position: absolute;
-  left: -95px;
-  bottom: 46px;
-  min-width: 58px;
-  height: 22px;
-  padding: 0 6px;
-  box-sizing: border-box;
-  border-radius: 5px;
-  background: linear-gradient(#2c3b18, #121a08);
-  border: 2px solid #7fb83a;
-  color: #fff;
-  font-weight: 700;
-  font-size: 15px;
-  line-height: 18px;
-  text-align: center;
-}
-.seat-name {
-  position: absolute;
-  left: -30px;
-  bottom: 48px;
-  color: #fff;
-  font-size: 13px;
-  text-shadow: 0 1px 2px #000;
-  white-space: nowrap;
-}
-.seat-btn {
-  position: absolute;
-  bottom: 4px;
-  width: 58px;
-  height: 59px;
+/* ± 按鈕：按下 ScaleTo(0.2, 0.85) / 放開 ScaleTo(0.2, 1) */
+.seat-bet-btn {
   cursor: pointer;
-  border: none;
-  padding: 0;
-  background-color: transparent;
-  transition: transform 0.08s;
+  transition: transform 0.2s linear;
 }
-.seat-btn:active {
-  transform: scale(0.92);
+/* 等待加入：FadeTo(1.2, 150) → FadeIn(1.2) 重複 */
+.seat-wait-breath {
+  animation: seat-wait-breath 2.4s linear infinite;
 }
-.seat-btn.minus {
-  left: -164px;
-}
-.seat-btn.plus {
-  left: 106px;
-}
-.seat-btn.fallback {
-  border-radius: 50%;
-  background: radial-gradient(#5aa9ff, #1d4fa8);
-  border: 3px solid #cfe6ff;
-  color: #fff;
-  font-size: 32px;
-  font-weight: 900;
-  line-height: 50px;
-}
-.seat-empty {
-  position: absolute;
-  left: -95px;
-  bottom: 14px;
-  width: 190px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 20px;
-  background: rgba(10, 25, 60, 0.55);
-  border: 1px solid rgba(140, 180, 255, 0.35);
-}
-.seat-empty-text {
-  color: #9fb6d8;
-  font-size: 20px;
-  letter-spacing: 4px;
+@keyframes seat-wait-breath {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.588;
+  }
 }
 
 /* ---------------- 左上 ---------------- */
@@ -177,4 +93,15 @@
 }
 .ui-toast.out {
   opacity: 0;
+}
+
+/* CsdDom 產生的圖片 / 文字層永遠不吃事件：按下換圖時會重建，若成為點擊目標會讓 click 失效 */
+.csd-img,
+.csd-img *,
+.csd-bmtext,
+.csd-bmtext *,
+.csd-check,
+.csd-check *,
+.csd-text {
+  pointer-events: none !important;
 }

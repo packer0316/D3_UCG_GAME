@@ -1,0 +1,58 @@
+.ai-auto-modal {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.7); /* 原版 BlackLoHori：黑色 alpha 178 */
+  font-family: 'Microsoft JhengHei', 'PingFang TC', 'Noto Sans TC', sans-serif;
+}
+.ai-auto-modal .csd-node {
+  pointer-events: none;
+}
+.ai-auto-modal .ui-interactive {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.ai-auto-scroller {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  pointer-events: auto;
+  scrollbar-width: none;
+  touch-action: pan-y;
+}
+.ai-auto-scroller::-webkit-scrollbar {
+  display: none;
+}
+.ai-auto-content {
+  position: relative;
+  width: 100%;
+}
+.ai-auto-row {
+  position: absolute;
+  left: 0;
+  width: 594px;
+  height: 145px;
+}
+.ai-auto-portrait {
+  position: absolute;
+  pointer-events: none;
+}
+.ai-auto-btn:active,
+.ai-auto-cell:active {
+  filter: brightness(1.15);
+}
+.ai-auto-input {
+  position: absolute;
+  inset: 4px;
+  width: calc(100% - 8px);
+  border: 1px solid #6cf;
+  border-radius: 4px;
+  background: #0b1e33;
+  color: #fff;
+  font: 700 20px 'Microsoft JhengHei', sans-serif;
+  text-align: center;
+  outline: none;
+  pointer-events: auto;
+}

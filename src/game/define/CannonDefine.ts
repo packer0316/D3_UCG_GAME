@@ -162,6 +162,8 @@ export const CANNON_COOLDOWN_EFK_MIN_FACTOR = 0.4;
 
 /** 座位：Main.csd SeatInfo_1..3（設計座標，x 相對畫面中央） */
 export const SEAT_COUNT = 3;
+/** Main.csd SeatInfo_n 節點的 y（座位 UI 原點）；砲台錨點 = 這裡 + SeatInfo.csd CannonNode 24.9 */
+export const SEAT_INFO_Y = 20;
 export const SEAT_ANCHORS = [
   { dx: -320, y: 44.9 },
   { dx: 0, y: 44.9 },

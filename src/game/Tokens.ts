@@ -7,8 +7,10 @@ import type { RewardSystem } from './systems/RewardSystem';
 import type { CameraShake } from './world/CameraShake';
 import type { SkillSystem } from './systems/SkillSystem';
 import type { LockSystem } from './systems/LockSystem';
+import type { AIAutoSystem } from './systems/AIAutoSystem';
 
 export const Tokens = {
+  AIAutoSystem: createToken<AIAutoSystem>('AIAutoSystem'),
   SkillSystem: createToken<SkillSystem>('SkillSystem'),
   LockSystem: createToken<LockSystem>('LockSystem'),
   FishSystem: createToken<FishSystem>('FishSystem'),

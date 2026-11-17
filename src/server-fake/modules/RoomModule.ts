@@ -1,6 +1,7 @@
 /** 房間：單人房、3 席（本人 seat 0，其他「等待加入」） */
 import type { SeatData } from '@net/protocol';
 import type { FakeServer, FakeServerModule } from '../FakeServer';
+import { SMART_FILTER_ORDER, SUPPORTED_FISH_TYPES } from '../config/scheduleConfig';
 
 export const ROOM_CONFIG = {
   roomName: '狂歡32房',
@@ -10,6 +11,7 @@ export const ROOM_CONFIG = {
   betList: [10, 50, 100, 500, 1000, 5000],
   defaultBet: 500,
   sceneType: 2, // Snow
+  vip: 6, // 暫時固定 VIP6（VipLevel.VIP_6 紫金）
 };
 
 export class RoomModule implements FakeServerModule {
@@ -26,6 +28,7 @@ export class RoomModule implements FakeServerModule {
       seatIndex: this.yourSeat,
       accountId: 1,
       name: 'Player',
+      vip: ROOM_CONFIG.vip,
       money: ROOM_CONFIG.initMoney,
       bet: ROOM_CONFIG.defaultBet,
     };
@@ -38,6 +41,9 @@ export class RoomModule implements FakeServerModule {
         betList: this.betList,
         roomName: ROOM_CONFIG.roomName,
       });
+    });
+    server.on('U2G_SMART_FILTER_LIST_REQ', () => {
+      server.send('G2U_SMART_FILTER_LIST_ACK', { fishIds: SMART_FILTER_ORDER.filter((t) => SUPPORTED_FISH_TYPES.has(t)) });
     });
     server.on('U2G_CHANGE_BET_REQ', ({ bet }) => {
       const seat = this.self;

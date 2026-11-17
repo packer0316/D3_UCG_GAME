@@ -38,7 +38,7 @@ import { FishClassRegistry } from '@game/world/FishClassRegistry';
 import { TRexFish } from '@game/world/TRexFish';
 import { FakeServer } from '@server-fake/FakeServer';
 import { createLocalTransportPair } from '@server-fake/LocalTransport';
-import { Hud, HUD_PLISTS } from '@ui/Hud';
+import { Hud, HUD_PLISTS, preloadHud } from '@ui/Hud';
 import { UIRoot } from '@ui/UIRoot';
 import { SkillPanel } from '@ui/SkillPanel';
 import { CsdLibrary } from '@engine/csd/CsdPlayer';
@@ -46,6 +46,8 @@ import { PointerRouter } from '@engine/input/PointerRouter';
 import { BulletBehaviorRegistry } from '@game/bullet/BulletTypes';
 import { SkillSystem } from '@game/systems/SkillSystem';
 import { LockSystem } from '@game/systems/LockSystem';
+import { AIAutoSystem } from '@game/systems/AIAutoSystem';
+import { AIAutoPanel } from '@ui/AIAutoPanel';
 import { createFeatures } from './features';
 
 export interface LoadingView {
@@ -146,10 +148,19 @@ export class GameApp {
     this.shooting = new ShootingSystem(this.ctx);
     this.reward = new RewardSystem(this.ctx);
     this.skillPanel = new SkillPanel(this.ctx);
+    const aiAuto = new AIAutoSystem(this.ctx);
+    const aiPanel = new AIAutoPanel(this.ctx, (cfg) => aiAuto.start(cfg));
+    // 自動按鈕（SkillCtrlViewBase:OnAIAutoClick）：一律關掉自動瞄準；執行中 → 停止，否則開設定面板
+    this.skillPanel.onAIAutoClick = () => {
+      this.skills.set('AutoShoot', false);
+      if (aiAuto.active) aiAuto.stop();
+      else aiPanel.open();
+    };
     const shake = new CameraShake(stage, actions);
     services.register(Tokens.SeatSystem, seat);
     services.register(Tokens.SkillSystem, this.skills);
     services.register(Tokens.LockSystem, this.lock);
+    services.register(Tokens.AIAutoSystem, aiAuto);
     services.register(Tokens.FishSystem, this.fishSystem);
     services.register(Tokens.ShootingSystem, this.shooting);
     services.register(Tokens.RewardSystem, this.reward);
@@ -165,8 +176,8 @@ export class GameApp {
       ['場景', () => this.bg.load(SceneType.Snow).then((d) => (this.fishSystem.shadowColor = d.shadowColor))],
       ['龍', () => this.fishSystem.preload(FISH_DEFINES.map((d) => d.type))],
       ['獎勵', () => this.reward.preload()],
-      ['技能', () => Promise.all([this.skillPanel.preload(), this.lock.preload()])],
-      ['介面', () => Promise.all(HUD_PLISTS.map((p) => assets.atlas(p)))],
+      ['技能', () => Promise.all([this.skillPanel.preload(), this.lock.preload(), aiPanel.preload()])],
+      ['介面', () => Promise.all([...HUD_PLISTS.map((p) => assets.atlas(p)), preloadHud(this.ctx)])],
       ['音效', () => Promise.all(Object.values(Sound).map((s) => audio.load(s)))],
     ];
     // 砲台的 EFK 需要 runtime 先初始化
@@ -189,6 +200,7 @@ export class GameApp {
     this.fishSystem.init();
     this.skills.init();
     this.lock.init();
+    aiAuto.init();
     this.shooting.init();
     this.reward.init();
     new Hud(this.ctx, ui);
@@ -197,7 +209,11 @@ export class GameApp {
     await this.features.installAll(createFeatures());
 
     // ---- 7. 登入 → 進房同步
-    events.once('room:ready', () => net.send('U2G_SYNC_SCRIPT_REQ', {}));
+    events.once('room:ready', () => {
+      net.send('U2G_SYNC_SCRIPT_REQ', {});
+      // 自動設定面板：進房後建立（存檔 key 需要 accountId），並向 server 要可選魚種清單
+      aiPanel.init();
+    });
     net.send('U2G_LOGIN_REQ', {});
     await net.wait('G2U_SYNC_SCRIPT_ACK').catch((e) => console.error(e));
     void audio.playBgm(Sound.BGM_NORMAL);

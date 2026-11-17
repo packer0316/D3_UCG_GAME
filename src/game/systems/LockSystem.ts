@@ -11,6 +11,7 @@ import { pointInPolygon } from '@core/math/geom2d';
 import type { CsdInstance } from '@engine/csd/CsdPlayer';
 import { WALL_POLYGON } from '../define/DisplayDefine';
 import { LOCK_AIM_CSD, LOCK_CHANGE_SOUND } from '../define/SkillDefine';
+import { aiBaseFishType } from '../define/AIAutoDefine';
 import type { GameContext } from '../GameContext';
 import { Tokens } from '../Tokens';
 import type { Fish } from '../world/Fish';
@@ -19,10 +20,13 @@ export class LockSystem {
   target: Fish | null = null;
   /** 玩家點選的目標（優先） */
   byClick = false;
-  /** 低於此賠率不能選（依子彈類型） */
-  limitOdds = 0;
+  private _limitOdds = 0;
   private lastType = 0;
   private readonly lastPos = new THREE.Vector2();
+  /** 自動（AIAuto）優先順序：母種 fishType → index；null = 一般自動（最高賠率） */
+  private priority: Map<number, number> | null = null;
+  /** 有新魚出現 → 下一發重新挑選（AIAutoShootModel） */
+  private recheck = false;
   private reticle: CsdInstance | null = null;
   private odds = new Map<number, number>();
   private readonly raycaster = new THREE.Raycaster();
@@ -41,16 +45,40 @@ export class LockSystem {
     this.ctx.events.on('fish:remove', ({ serial }) => {
       if (this.target?.serial === serial) this.clear(true);
     });
+    // 新生成的魚也依目前限制賠率設定（FishLayer:OnFishCreated → SetFishUnSelectableByLimitOdds）
+    this.ctx.events.on('fish:spawn', ({ fish }) => this.applyLimit(fish));
+  }
+
+  /** 低於此賠率不能選（依子彈類型 SpecialBulletDefine.LimitOdds） */
+  get limitOdds(): number {
+    return this._limitOdds;
+  }
+
+  /** FishLayer:OnChangeBulletType：全場魚依限制賠率設定可否選取（不可選取 → 半透明） */
+  set limitOdds(v: number) {
+    if (v === this._limitOdds) return;
+    this._limitOdds = v;
+    for (const f of this.fishSystem.aliveFish()) this.applyLimit(f);
+    if (this.target && !this.isSelectable(this.target)) this.clear(true);
+  }
+
+  private applyLimit(fish: Fish): void {
+    const un = this.oddsOf(fish) < this._limitOdds;
+    if (un !== fish.unselectable) fish.setUnSelectable(un);
   }
 
   oddsOf(fish: Fish): number {
     return this.odds.get(fish.type) ?? 0;
   }
 
-  /** 可被選為目標：可命中、在畫面判定範圍內、賠率達標 */
+  /** 可被鎖定：可命中、賠率達標（原版 GetIsUnSelectable + LimitOdds；點選不檢查是否在畫面範圍內） */
   isSelectable(fish: Fish): boolean {
     if (!fish.hittable || fish.dying || !fish.sprite.visible || !fish.node.parent) return false;
-    if (this.oddsOf(fish) < this.limitOdds) return false;
+    return this.oddsOf(fish) >= this._limitOdds;
+  }
+
+  /** 在場內判定範圍（原版 FishBase:GetIsInScreen = 牆多邊形內）；只用於自動選目標 */
+  isInScreen(fish: Fish): boolean {
     return pointInPolygon({ x: fish.node.position.x, y: fish.node.position.y }, WALL_POLYGON);
   }
 
@@ -58,14 +86,44 @@ export class LockSystem {
     return this.ctx.services.get(Tokens.FishSystem);
   }
 
-  /** FishSystem:GetBestOddsFish */
+  /** 設定自動優先順序（null = 解除） */
+  setPriority(list: number[] | null): void {
+    this.priority = list ? new Map(list.map((t, i) => [t, i])) : null;
+    this.recheck = true;
+  }
+
+  requestRecheck(): void {
+    this.recheck = true;
+  }
+
+  private priorityOf(fish: Fish): number {
+    return this.priority?.get(aiBaseFishType(fish.type)) ?? Infinity;
+  }
+
+  /** AIAutoShootModel：可選且在牆內的魚中，優先順序最前者（同順序取第一隻） */
+  private pickByPriority(): Fish | null {
+    let best: Fish | null = null;
+    let bestIdx = Infinity;
+    for (const f of this.fishSystem.hittable()) {
+      if (!this.isSelectable(f) || !this.isInScreen(f)) continue;
+      const idx = this.priorityOf(f);
+      if (idx < bestIdx) {
+        bestIdx = idx;
+        best = f;
+      }
+    }
+    return best;
+  }
+
+  /** FishSystem:GetBestOddsFish（AIAuto 時改用優先順序） */
   pickBest(): Fish | null {
+    if (this.priority) return this.pickByPriority();
     let same: Fish | null = null;
     let sameDist = Infinity;
     let best: Fish | null = null;
     let bestOdds = -1;
     for (const f of this.fishSystem.hittable()) {
-      if (!this.isSelectable(f)) continue;
+      if (!this.isSelectable(f) || !this.isInScreen(f)) continue;
       if (f.type === this.lastType) {
         const d = this.lastPos.distanceTo(new THREE.Vector2(f.node.position.x, f.node.position.y));
         if (d < sameDist) {
@@ -130,9 +188,18 @@ export class LockSystem {
   /** 每次開砲前：失效的目標清掉；auto 時沒有目標就自動選 */
   ensureTarget(auto: boolean): Fish | null {
     if (this.target && !this.isSelectable(this.target)) this.clear(true);
-    if (!this.target && auto) {
-      const f = this.pickBest();
-      if (f) this.lock(f, false);
+    if (auto) {
+      if (!this.target) {
+        const f = this.pickBest();
+        if (f) this.lock(f, false);
+      } else if (this.recheck && this.priority && !this.byClick) {
+        // 新魚出現：最佳魚種與目前不同才換（AIAutoShootModel）
+        const best = this.pickByPriority();
+        if (best && aiBaseFishType(best.type) !== aiBaseFishType(this.target.type) && this.priorityOf(best) < this.priorityOf(this.target)) {
+          this.lock(best, false);
+        }
+      }
+      this.recheck = false;
     }
     return this.target;
   }

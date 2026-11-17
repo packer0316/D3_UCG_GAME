@@ -133,6 +133,11 @@ export class FishSystem implements TimelineListener {
     return this.alive.get(serial);
   }
 
+  /** 所有存活的魚（含隱藏中 / 不可命中） */
+  *aliveFish(): IterableIterator<Fish> {
+    yield* this.alive.values();
+  }
+
   /** 可命中的魚 */
   *hittable(): IterableIterator<Fish> {
     for (const f of this.alive.values()) if (f.hittable && !f.dying && f.sprite.visible) yield f;

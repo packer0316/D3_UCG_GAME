@@ -20,6 +20,8 @@ export interface SeatData {
   seatIndex: number;
   accountId: number;
   name: string;
+  /** VIP 等級（VipDefine.VipLevel） */
+  vip: number;
   money: number;
   bet: number;
 }
@@ -69,6 +71,8 @@ export interface ClientToServer {
   U2G_CHANGE_BET_REQ: { bet: number };
   /** 測試工具（原版 DEBUG_U2G_CLIENT_TOOL_USE_REQ）：toolType 1 = 出獎模式（target 1/0）、2 = 召喚（target = groupId） */
   U2G_DEBUG_CLIENT_TOOL_USE_REQ: { toolType: number; target: number; quantity: number };
+  /** 自動（智能篩選）可選魚種清單 */
+  U2G_SMART_FILTER_LIST_REQ: Record<string, never>;
 }
 
 /** 測試工具類型（TestCommonDefine.lua） */
@@ -91,6 +95,8 @@ export interface ServerToClient {
   G2U_KILL_FLOATODDS_FISH_NOTIFY: KillFloatOddsNotify;
   G2U_SEAT_MONEY_NOTIFY: { seat: number; seatMoney: number };
   G2U_DEBUG_CLIENT_TOOL_USE_ACK: { toolType: number; errorCode: number; target: number };
+  /** 面板顯示 = 客戶端清單 ∩ fishIds，依 server 順序 */
+  G2U_SMART_FILTER_LIST_ACK: { fishIds: number[] };
 }
 
 export type C2SCmd = keyof ClientToServer;

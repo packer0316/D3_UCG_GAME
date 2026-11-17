@@ -38,6 +38,9 @@ export class SkillPanel {
   private buttons: ButtonView[] = [];
   private pressed: { btn: ButtonView; x: number; y: number } | null = null;
   private lightingState = '';
+  private shootCount: CsdNodeView | undefined;
+  /** 自動按鈕（AIAuto）點擊：由 GameApp 接到設定面板（SkillCtrlViewBase:OnAIAutoClick） */
+  onAIAutoClick: (() => void) | null = null;
 
   constructor(private readonly ctx: GameContext) {}
 
@@ -75,9 +78,29 @@ export class SkillPanel {
       move: (p) => this.onMove(p),
       up: (p, cancelled) => this.onUp(p, cancelled),
     });
+    this.shootCount = this.buttons.find((b) => b.def.id === 'AIAuto')?.view.children.find((c) => c.data.name === 'ShootCount');
     this.ctx.events.on('skill:change', () => this.refresh());
     this.ctx.events.on('seat:bet', () => this.refresh());
+    // 自動按鈕上的剩餘子彈數（SkillButtonBase：≤ 0 隱藏）
+    this.ctx.events.on('ai:change', ({ active, shotsLeft }) => {
+      if (!this.shootCount) return;
+      this.shootCount.visible = active && shotsLeft > 0;
+      if (shotsLeft > 0) this.shootCount.setText(String(shotsLeft));
+    });
+    window.addEventListener('keydown', (e) => {
+      const t = e.target as HTMLElement | null;
+      if (e.code !== 'Space' || e.repeat || t?.tagName === 'INPUT') return;
+      e.preventDefault();
+      this.click('AIAuto');
+    });
     this.refresh();
+  }
+
+  /** 按鈕被點擊（自動按鈕交給設定面板流程，其餘切換技能） */
+  private click(id: SkillButtonDefine['id']): void {
+    this.ctx.audio.play(SKILL_CLICK_SOUND);
+    if (id === 'AIAuto' && this.onAIAutoClick) this.onAIAutoClick();
+    else this.skills.toggle(id);
   }
 
   private layout(): void {
@@ -155,8 +178,7 @@ export class SkillPanel {
     if (!pr) return;
     this.press(pr.btn, false);
     if (cancelled) return;
-    this.ctx.audio.play(SKILL_CLICK_SOUND);
-    this.skills.toggle(pr.btn.def.id);
+    this.click(pr.btn.def.id);
   }
 
   update(dt: number): void {

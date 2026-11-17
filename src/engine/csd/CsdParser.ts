@@ -15,7 +15,18 @@ export type CsdNodeType =
   | 'Particle'
   | 'Panel'
   | 'Button'
+  | 'CheckBox'
   | 'Layer';
+
+export interface CsdTextStyle {
+  fontSize: number;
+  outline?: { size: number; color: [number, number, number] };
+  shadow?: { color: [number, number, number]; x: number; y: number };
+  /** 水平 / 垂直對齊（HorizontalAlignmentType / VerticalAlignmentType） */
+  hAlign?: string;
+  /** Button 文字顏色 */
+  color?: [number, number, number];
+}
 
 export interface CsdFileRef {
   /** PlistSubImage / Normal / Default / MarkedSubImage */
@@ -54,7 +65,20 @@ export interface CsdNode {
   font?: CsdFileRef;
   fontSize?: number;
   scale9?: boolean;
+  scale9Caps?: { l: number; r: number; t: number; b: number };
   innerActionSpeed?: number;
+  /** 所有 *FileData（Button：Normal/Pressed/Disabled；CheckBox：NormalBack/NodeNormal…） */
+  files?: Record<string, CsdFileRef>;
+  /** Text（TTF）樣式 */
+  textStyle?: CsdTextStyle;
+  /** 可點擊（TouchEnable） */
+  touch?: boolean;
+  /** CheckBox 預設勾選 */
+  checked?: boolean;
+  /** Panel 單色背景 [r,g,b,a]（0..255） */
+  bgColor?: [number, number, number, number];
+  /** Panel 裁切子節點（ClipAble） */
+  clip?: boolean;
   children: CsdNode[];
 }
 
@@ -158,7 +182,11 @@ const CTYPE: Record<string, CsdNodeType> = {
   ParticleObjectData: 'Particle',
   PanelObjectData: 'Panel',
   ButtonObjectData: 'Button',
+  CheckBoxObjectData: 'CheckBox',
 };
+
+const rgb = (el: XmlEl | undefined, d: [number, number, number]): [number, number, number] =>
+  el ? [num(el.attrs.R, d[0]), num(el.attrs.G, d[1]), num(el.attrs.B, d[2])] : d;
 
 function parseNode(el: XmlEl): CsdNode {
   const a = el.attrs;
@@ -195,14 +223,47 @@ function parseNode(el: XmlEl): CsdNode {
   const file =
     fileRef(child(el, 'FileData')) ??
     fileRef(child(el, 'NormalFileData')) ?? // Button
+    fileRef(child(el, 'NormalBackFileData')) ?? // CheckBox
     fileRef(child(el, 'BackGroundImageData')); // Panel
   if (file) node.file = file;
+  const files: Record<string, CsdFileRef> = {};
+  for (const c of el.children) {
+    if (!c.name.endsWith('FileData') || c.name === 'FileData') continue;
+    const f = fileRef(c);
+    if (f) files[c.name] = f;
+  }
+  if (Object.keys(files).length) node.files = files;
+  if (type === 'Text' || type === 'Button') {
+    const style: CsdTextStyle = { fontSize: num(a.FontSize, 20) };
+    if (a.OutlineEnabled === 'True') style.outline = { size: num(a.OutlineSize, 1), color: rgb(child(el, 'OutlineColor'), [0, 0, 0]) };
+    if (a.ShadowEnabled === 'True')
+      style.shadow = { color: rgb(child(el, 'ShadowColor'), [0, 0, 0]), x: num(a.ShadowOffsetX, 2), y: num(a.ShadowOffsetY, -2) };
+    if (a.HorizontalAlignmentType) style.hAlign = a.HorizontalAlignmentType;
+    // Button 的文字顏色在 <TextColor>（Text 的文字顏色就是 CColor）
+    const tc = child(el, 'TextColor');
+    if (tc) style.color = rgb(tc, [255, 255, 255]);
+    node.textStyle = style;
+  }
+  if (a.TouchEnable === 'True') node.touch = true;
+  if (type === 'Panel' || type === 'Layer') {
+    // ComboBoxIndex 1 = 單色背景（SingleColor + BackColorAlpha）
+    if (a.ComboBoxIndex === '1' && num(a.BackColorAlpha, 255) > 0) {
+      const c = rgb(child(el, 'SingleColor'), [255, 255, 255]);
+      node.bgColor = [c[0], c[1], c[2], num(a.BackColorAlpha, 255)];
+    }
+    if (a.ClipAble === 'True') node.clip = true;
+  }
+  if (type === 'CheckBox') node.checked = a.CheckedState === 'True';
   if (blend) node.blend = [num(blend.attrs.Src, 1), num(blend.attrs.Dst, 771)];
   if (a.LabelText !== undefined) node.text = a.LabelText;
   const font = fileRef(child(el, 'LabelBMFontFile_CNB'));
   if (font) node.font = font;
   if (a.FontSize) node.fontSize = num(a.FontSize);
-  if (a.Scale9Enable === 'True') node.scale9 = true;
+  if (a.Scale9Enable === 'True') {
+    node.scale9 = true;
+    // 九宮格邊寬（原圖像素）：LeftEage / RightEage / TopEage / BottomEage
+    node.scale9Caps = { l: num(a.LeftEage), r: num(a.RightEage), t: num(a.TopEage), b: num(a.BottomEage) };
+  }
   if (a.InnerActionSpeed) node.innerActionSpeed = num(a.InnerActionSpeed, 1);
   const kids = child(el, 'Children');
   if (kids) for (const k of kids.children) if (k.name === 'AbstractNodeData') node.children.push(parseNode(k));
@@ -314,6 +375,7 @@ export function listCsdDeps(csd: CsdFile): CsdDeps {
   };
   const walk = (n: CsdNode) => {
     addFile(n.file, n.type);
+    if (n.files) for (const f of Object.values(n.files)) addFile(f, n.type);
     if (n.font) deps.fonts.add(n.font.path);
     n.children.forEach(walk);
   };

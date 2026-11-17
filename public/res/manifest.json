@@ -1,7 +1,17 @@
 {
- "generatedAt": "2026-11-17T07:25:23.324Z",
+ "generatedAt": "2026-11-17T08:21:52.637Z",
  "source": "D:/GIT_TMD/Git_1/DragonTycoon3/ClientCocos/DragonTycoon3Resource",
  "files": [
+  "CsbRes/gameCommonUI/AutoPlay/AIAutoFishCellAdvance.csd.json",
+  "CsbRes/gameCommonUI/AutoPlay/AIAutoFishCellGroupAdvance.csd.json",
+  "CsbRes/gameCommonUI/AutoPlay/AIAutoFrameAdvance.csd.json",
+  "CsbRes/gameCommonUI/AutoPlay/AIAutoSettingViewAdvance.csd.json",
+  "CsbRes/gameCommonUI/AutoPlay/Fnt/Challenge_Num.fnt",
+  "CsbRes/gameCommonUI/AutoPlay/Fnt/Challenge_Num.png",
+  "CsbRes/gameCommonUI/BlackLoHori.csd.json",
+  "CsbRes/gameCommonUI/Plist/CommonUI.plist",
+  "CsbRes/gameCommonUI/Plist/CommonUI.plist.json",
+  "CsbRes/gameCommonUI/Plist/CommonUI.png",
   "Data/FishData.json",
   "Data/GroupData.json",
   "Data/PathData.json",
@@ -13,6 +23,12 @@
   "DinosaurExport/Bullet_dt3/dt3_cannon_E_Bullet.csd.json",
   "DinosaurExport/Bullet_dt3/dt3_cannon_E_Hit.csd.json",
   "DinosaurExport/Bullet_dt3/dt3_cannon_E_laser.csd.json",
+  "DinosaurExport/DT_resource/DragonFeather/DragonFeatherUI.csd.json",
+  "DinosaurExport/DT_resource/DragonFeather/Img/BlueDragonFrame_Feather.png",
+  "DinosaurExport/DT_resource/DragonFeather/Img/BlueDragonFrame_Small.png",
+  "DinosaurExport/DT_resource/DragonFeather/Img/BlueDragonFrame_Text.png",
+  "DinosaurExport/DT_resource/DragonFeather/Img/FX_spot01.png",
+  "DinosaurExport/DT_resource/DragonFeather/Img/LightBeam01s.png",
   "DinosaurExport/DT_resource/Fire_Normal_Hit.csd.json",
   "DinosaurExport/effect/Auto.plist",
   "DinosaurExport/effect/Auto.plist.particle.json",
@@ -35,6 +51,7 @@
   "DinosaurExport/main/Card.csd.json",
   "DinosaurExport/main/Card_lighting.csd.json",
   "DinosaurExport/main/LockAim_Anim.csd.json",
+  "DinosaurExport/main/SeatInfo.csd.json",
   "DinosaurExport/plist/Bullet_dt3.plist",
   "DinosaurExport/plist/Bullet_dt3.plist.json",
   "DinosaurExport/plist/Bullet_dt3.png",
@@ -153,6 +170,7 @@
   "Sound/mp3/sound/C_2.mp3",
   "Sound/mp3/sound/C_3.mp3",
   "Sound/mp3/sound/L_4.mp3",
+  "Sound/mp3/sound/MG_2.mp3",
   "Sound/mp3/sound/MG_3.mp3",
   "Sound/mp3/sound/MG_4.mp3",
   "Sound/mp3/sound/MG_5.mp3",
@@ -160,6 +178,9 @@
   "Sound/mp3/sound/S_24.mp3",
   "Sound/mp3/sound/se_05A.mp3",
   "Sound/mp3/sound/se_28E.mp3",
-  "Sound/mp3/sound/se_51.mp3"
+  "Sound/mp3/sound/se_51.mp3",
+  "vip/VIPCards.plist",
+  "vip/VIPCards.plist.json",
+  "vip/VIPCards.png"
  ]
 }

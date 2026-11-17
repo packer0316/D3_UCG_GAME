@@ -1,0 +1,148 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+	<dict>
+		<key>frames</key>
+		<dict>
+			<key>vip/img/VIP_card_big/VIP_0.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{1,1},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/VIP_1.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{145,1},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/VIP_2.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{289,1},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/VIP_3.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{1,95},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/VIP_4.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{145,95},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/VIP_5.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{289,95},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/VIP_6.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{1,189},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/SVIP_1.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{1,283},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/SVIP_2.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{1,377},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/SVIP_3.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{145,189},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+			<key>vip/img/VIP_card_big/VIP_7.png</key>
+			<dict>
+				<key>frame</key>
+				<string>{{289,189},{142,92}}</string>
+				<key>offset</key>
+				<string>{0,0}</string>
+				<key>rotated</key>
+				<false />
+				<key>sourceSize</key>
+				<string>{142,92}</string>
+			</dict>
+		</dict>
+		<key>metadata</key>
+		<dict>
+			<key>format</key>
+			<integer>2</integer>
+			<key>textureFileName</key>
+			<string>VIPCards.png</string>
+			<key>realTextureFileName</key>
+			<string>VIPCards.png</string>
+			<key>size</key>
+			<string>{432,470}</string>
+		</dict>
+		<key>texture</key>
+		<dict>
+			<key>width</key>
+			<integer>432</integer>
+			<key>height</key>
+			<integer>470</integer>
+		</dict>
+	</dict>
+</plist>

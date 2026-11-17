@@ -19,6 +19,8 @@ import type { PathTrack } from '../path/PathTrack';
 import type { TimelineFish } from '../timeline/FishTimeline';
 
 export const FISH_NODE_SCALE = 3; // 原版：加入場景的龍都會放大 3 倍
+/** 不可選取時的不透明度（FishBase:SetUnSelectable 預設 70） */
+export const UNSELECTABLE_OPACITY = 70;
 
 export interface FishInit {
   info: TimelineFish;
@@ -285,6 +287,19 @@ export class Fish {
 
   set bleachRate(r: number) {
     for (const m of this.materials) m.bleachRate = r;
+  }
+
+  /** 不可選取（低於目前砲種的限制賠率）：半透明 */
+  unselectable = false;
+
+  /**
+   * FishBase:SetUnSelectable：不可選取時不透明度預設 70（/255），可選取時 255。
+   * 只改魚身（含陰影，跟著 u_color.a），外掛節點（Boss_Mark）不變；死亡表演中不覆寫。
+   */
+  setUnSelectable(v: boolean, opacity = UNSELECTABLE_OPACITY): void {
+    this.unselectable = v;
+    if (this.dying) return;
+    this.alpha = v ? opacity / 255 : 1;
   }
 
   setVisible(v: boolean): void {

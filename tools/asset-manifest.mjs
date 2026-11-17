@@ -10,6 +10,16 @@ export const SOURCE_ROOT =
 export const CSD_SOURCE_ROOT =
   process.env.D3_CSD_SRC ?? 'D:/GIT_TMD/Git_1/TMD_CocosStudio_DragonTycoon3/CocosProject/cocosstudio';
 
+/** TMDCommon 共用 UI（自動設定面板等）：以 "common-csd:<路徑>" 列在 groups 內 */
+export const COMMON_CSD_SOURCE_ROOT =
+  process.env.D3_COMMON_CSD_SRC ?? 'D:/GIT_TMD/Git_1/TMDC_CocosStudio_TMDCommon/CocoStudioProject/cocosstudio';
+export const COMMON_RES_ROOT =
+  process.env.D3_COMMON_RES ?? 'D:/GIT_TMD/Git_1/TMDCommon/ClientCocos/TMDCommonResource';
+
+/** Inanna 平台共用資源（VIP 卡等）：以 "inanna:<路徑>" 列在 groups 內，輸出到 public/res/<路徑> */
+export const INANNA_RES_ROOT =
+  process.env.D3_INANNA_RES ?? 'D:/GIT_TMD/Git_1/Inanna/InannaResource/Inanna';
+
 export const groups = {
   data: ['Data/PathData.json', 'Data/GroupData.json', 'Data/FishData.json'],
 
@@ -110,12 +120,22 @@ export const groups = {
     'csd:DinosaurExport/Bullet_dt3/dt3_cannon_E_laser.csd',
   ],
 
+  // 座位面板（砲台下方：押注 / 名字 / VIP / 餘額 / ± 按鈕 / 等待加入）
+  seatInfo: ['csd:DinosaurExport/main/SeatInfo.csd', 'inanna:vip/VIPCards.plist'],
+
+  // 自動（AIAuto）設定面板：TMDCommon 共用 UI
+  aiAutoPanel: [
+    'common-csd:CsbRes/gameCommonUI/AutoPlay/AIAutoSettingViewAdvance.csd',
+    'common-csd:CsbRes/gameCommonUI/AutoPlay/AIAutoFishCellGroupAdvance.csd',
+  ],
+
   sound: [
     'Sound/mp3/sound/MG_4.mp3',
     'Sound/mp3/sound/MG_5.mp3',
     'Sound/mp3/sound/MG_6.mp3',
     'Sound/mp3/sound/S_24.mp3',
     'Sound/mp3/sound/L_4.mp3',
+    'Sound/mp3/sound/MG_2.mp3',
     'Sound/mp3/sound/MG_3.mp3',
     'Sound/mp3/sound/C_1.mp3',
     'Sound/mp3/sound/C_2.mp3',

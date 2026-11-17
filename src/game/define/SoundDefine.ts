@@ -1,5 +1,6 @@
 /** 音效 — 原版 Define/SoundDefine.lua（路徑 = Sound/mp3/<name>.mp3） */
 export const Sound = {
+  BTN_CLICK2: 'sound/MG_2', // 切換BET
   SHOOT: 'sound/MG_3',
   WINCIRCLE_SMALL: 'sound/C_1',
   WINCIRCLE_MIDDLE: 'sound/C_2',

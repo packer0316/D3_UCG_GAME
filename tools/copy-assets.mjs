@@ -8,7 +8,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, copyFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SOURCE_ROOT, CSD_SOURCE_ROOT, groups } from './asset-manifest.mjs';
+import { SOURCE_ROOT, CSD_SOURCE_ROOT, COMMON_CSD_SOURCE_ROOT, COMMON_RES_ROOT, INANNA_RES_ROOT, groups } from './asset-manifest.mjs';
 import { listC3bTextures } from '../src/engine/loaders/C3bParser.ts';
 import { parseCsd, listCsdDeps } from '../src/engine/csd/CsdParser.ts';
 
@@ -16,6 +16,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DEST_ROOT = resolve(here, '../public/res');
 const SRC = resolve(SOURCE_ROOT);
 const CSD_SRC = resolve(CSD_SOURCE_ROOT);
+const COMMON_CSD_SRC = resolve(COMMON_CSD_SOURCE_ROOT);
+const COMMON_RES = resolve(COMMON_RES_ROOT);
+const INANNA_RES = resolve(INANNA_RES_ROOT);
+/** 資源根目錄（目的地路徑 = 相對於所屬根目錄） */
+const RES_ROOTS = [SRC, COMMON_RES, INANNA_RES];
 
 if (!existsSync(SRC)) {
   console.error(`找不到原版資源目錄：${SRC}\n請設定環境變數 D3_SRC`);
@@ -24,7 +29,10 @@ if (!existsSync(SRC)) {
 
 // ---------- 小工具 ----------
 const toPosix = (p) => p.replace(/\\/g, '/');
-const rel = (abs) => toPosix(relative(SRC, abs));
+const rel = (abs) => {
+  const root = RES_ROOTS.find((r) => !relative(r, abs).startsWith('..')) ?? SRC;
+  return toPosix(relative(root, abs));
+};
 
 let basenameIndex = null;
 function findByBasename(name) {
@@ -58,7 +66,11 @@ function expand(pattern) {
 
 // ---------- plist（TexturePacker XML）解析 ----------
 function parsePlistXml(xml) {
-  const tokens = xml.match(/<\/?[a-zA-Z]+\/?>|[^<]+/g).filter((t) => t.trim() !== '' || false);
+  // 自閉合標籤可能帶空白（Inanna VIPCards.plist：<false />）→ 正規化成 <false/>
+  const tokens = xml
+    .match(/<\/?[a-zA-Z]+\s*\/?>|[^<]+/g)
+    .map((t) => (t.startsWith('<') ? t.replace(/\s+/g, '') : t))
+    .filter((t) => t.trim() !== '' || false);
   let i = 0;
   const skipWs = () => {
     while (i < tokens.length && !tokens[i].startsWith('<')) i++;
@@ -250,11 +262,13 @@ function handleDeps(srcAbs, asAbs) {
  * plist / 字型 / 圖片從原版資源複製；子 csd 遞迴轉換；粒子 plist 轉 .particle.json
  */
 const csdDone = new Set();
-function processCsd(relPath, from = null) {
+const DT3_ROOTS = { csd: CSD_SRC, res: SRC };
+const COMMON_ROOTS = { csd: COMMON_CSD_SRC, res: COMMON_RES };
+function processCsd(relPath, from = null, roots = DT3_ROOTS) {
   const key = relPath.toLowerCase();
   if (csdDone.has(key)) return;
   csdDone.add(key);
-  const abs = join(CSD_SRC, relPath);
+  const abs = join(roots.csd, relPath);
   if (!existsSync(abs)) {
     missing.push(`csd:${relPath}${from ? `  (ref by ${from})` : ''}`);
     return;
@@ -271,12 +285,12 @@ function processCsd(relPath, from = null) {
   writeFileSync(dest, JSON.stringify(csd));
   copied.push(`${relPath}.json  (from csd)`);
   const deps = listCsdDeps(csd);
-  const res = (p) => join(SRC, p.replace(/^DragonTycoon3Resource\//, ''));
+  const res = (p) => join(roots.res, p.replace(/^DragonTycoon3Resource\//, ''));
   for (const p of deps.plists) process_(res(p), abs);
   for (const p of deps.fonts) process_(res(p), abs);
   for (const p of deps.images) process_(res(p), abs);
   for (const p of deps.particles) process_(res(p), abs);
-  for (const p of deps.csds) processCsd(p, relPath);
+  for (const p of deps.csds) processCsd(p, relPath, roots);
 }
 
 const t0 = Date.now();
@@ -285,6 +299,14 @@ for (const [group, list] of Object.entries(groups)) {
   for (const pattern of list) {
     if (pattern.startsWith('csd:')) {
       processCsd(pattern.slice(4));
+      continue;
+    }
+    if (pattern.startsWith('common-csd:')) {
+      processCsd(pattern.slice('common-csd:'.length), null, COMMON_ROOTS);
+      continue;
+    }
+    if (pattern.startsWith('inanna:')) {
+      process_(join(INANNA_RES, pattern.slice('inanna:'.length)));
       continue;
     }
     const files = expand(pattern);

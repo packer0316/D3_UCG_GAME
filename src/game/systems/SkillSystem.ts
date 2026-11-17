@@ -16,9 +16,7 @@ export class SkillSystem {
   constructor(private readonly ctx: GameContext) {}
 
   init(): void {
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && !e.repeat) this.toggle('AIAuto');
-    });
+    // 空白鍵 = 自動按鈕，由 SkillPanel 處理（需要開設定面板）
   }
 
   isOn(id: SkillButtonId): boolean {

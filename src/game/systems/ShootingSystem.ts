@@ -60,6 +60,8 @@ export class ShootingSystem implements BulletHost {
   private hitFx: BulletHitFx | null = null;
   private type: SpecialBulletTypeId = SpecialBulletType.None;
   private auto = false;
+  /** 一般模式下點到魚：按住期間以鎖定彈射擊該魚（放開解除） */
+  private clickLock = false;
 
   constructor(private readonly ctx: GameContext) {
     this.hitShow = new FishHitShow(ctx.actions);
@@ -223,11 +225,19 @@ export class ShootingSystem implements BulletHost {
   private onPointerDown(p: PointerInfo): boolean {
     if (p.button !== 0) return false;
     this.releaseAt = -1;
+    const fish = this.lock.pickAt(p.x, p.y);
     if (this.special.isLockFish) {
       // 點到魚 → 鎖定（點選優先）；手動模式點空白不射
-      const fish = this.lock.pickAt(p.x, p.y);
       if (fish) this.lock.lock(fish, true);
       this.holding = !!fish || !!this.lock.target;
+      return true;
+    }
+    if (fish) {
+      // 一般模式點到魚 → 鎖定該魚，按住期間以鎖定彈（×1）射擊；放開解除
+      // （使用者需求；原版一般模式只朝觸控點直射）
+      this.clickLock = true;
+      this.lock.lock(fish, true);
+      this.holding = true;
       return true;
     }
     this.holding = true;
@@ -264,17 +274,17 @@ export class ShootingSystem implements BulletHost {
     return s.bet > 0 && s.displayMoney >= cost && this.seatBulletCount(s.yourSeat) < BULLET_MAX_COUNT;
   }
 
-  private sendShoot(id: number, bet: number, angle: number, targets: Fish[]): void {
-    const cost = bet * this.special.costRate;
-    this.seatSystem.predictShot(id, cost);
+  private sendShoot(id: number, bet: number, angle: number, targets: Fish[], type: SpecialBulletTypeId): void {
+    const sp = SPECIAL_BULLETS[type];
+    this.seatSystem.predictShot(id, bet * sp.costRate);
     this.ctx.net.send('U2G_SHOOT_REQ', {
       bulletId: id,
-      bulletType: this.type,
+      bulletType: type,
       bet,
       angle: ((angle % 360) + 360) % 360,
       scriptIdDataVec: targets.map(toId),
     });
-    this.ctx.audio.play(this.special.sound, { volume: 0.6, minInterval: 0.08 });
+    this.ctx.audio.play(sp.sound, { volume: 0.6, minInterval: 0.08 });
     this.ctx.events.emit('shoot:fire', { seat: this.seatSystem.yourSeat, bulletId: id });
   }
 
@@ -289,7 +299,7 @@ export class ShootingSystem implements BulletHost {
     const b = new NormalBullet(id, seatSys.yourSeat, seatSys.bet, def, { x: start.x, y: start.y }, cannon.angle, this.ctx.efk, true);
     this.normals.push(b);
     this.ctx.layers.bullet.add(b.node);
-    this.sendShoot(id, seatSys.bet, cannon.angle, []);
+    this.sendShoot(id, seatSys.bet, cannon.angle, [], this.type);
     return true;
   }
 
@@ -309,10 +319,10 @@ export class ShootingSystem implements BulletHost {
     return [main, ...near.slice(0, extra).map((n) => n.f)];
   }
 
-  private fireLock(target: Fish): boolean {
+  private fireLock(target: Fish, type: SpecialBulletTypeId): boolean {
     const seatSys = this.seatSystem;
     const cannon = this.selfCannon;
-    const sp = this.special;
+    const sp = SPECIAL_BULLETS[type];
     const def = BULLET_DATA[sp.bulletId];
     if (!cannon || !this.canShoot(seatSys.bet * sp.costRate)) return false;
     cannon.aimAt(target.node.position);
@@ -325,14 +335,14 @@ export class ShootingSystem implements BulletHost {
       seat: seatSys.yourSeat,
       bet: seatSys.bet,
       def,
-      bulletType: this.type,
+      bulletType: type,
       isSelf: true,
       muzzle: cannon.getMuzzleWorld(),
       targets,
     });
     this.lockShots.push(shot);
     if (def.kind === 'laser') this.ensureBeam(def).shoot();
-    this.sendShoot(id, seatSys.bet, def.kind === 'lightning' ? 0 : cannon.angle, targets);
+    this.sendShoot(id, seatSys.bet, def.kind === 'lightning' ? 0 : cannon.angle, targets, type);
     return true;
   }
 
@@ -394,15 +404,21 @@ export class ShootingSystem implements BulletHost {
     if (this.releaseAt >= 0 && this.time >= this.releaseAt) {
       this.holding = false;
       this.releaseAt = -1;
+      if (this.clickLock) {
+        this.clickLock = false;
+        this.lock.clear();
+      }
     }
 
     // ---- 開砲（ShootCtrl：CD 迴圈）
     const sp = this.special;
     this.cd -= dt;
-    if (sp.isLockFish) {
-      const target = this.lock.ensureTarget(this.auto);
+    if (sp.isLockFish || this.clickLock) {
+      // 一般模式點魚 → 以鎖定彈（Lock）射擊
+      const type = sp.isLockFish ? this.type : SpecialBulletType.Lock;
+      const target = this.lock.ensureTarget(sp.isLockFish && this.auto);
       if (target && (this.auto || this.holding)) {
-        if (this.cd <= 0 && this.fireLock(target)) this.cd = sp.shootCD;
+        if (this.cd <= 0 && this.fireLock(target, type)) this.cd = SPECIAL_BULLETS[type].shootCD;
       }
     } else {
       if (this.holding && this.aimTarget) this.selfCannon?.aimAt(this.aimTarget);
