@@ -61,7 +61,8 @@ function distToEdges(p: Vec2, poly: readonly Vec2[]): number {
   return best;
 }
 
-describe.each(CAMERA_PRESETS.map((p) => [p.name, p] as const))('相機預設 %s：子彈牆', (_name, preset) => {
+// 非戰鬥相機（裝潢的俯視）不開砲，不需要配子彈牆
+describe.each(CAMERA_PRESETS.filter((p) => !p.nonCombat).map((p) => [p.name, p] as const))('相機預設 %s：子彈牆', (_name, preset) => {
   const wall: readonly Vec2[] = preset.wall ?? WALL_POLYGON;
   const farY = Math.max(...wall.map((p) => p.y));
 

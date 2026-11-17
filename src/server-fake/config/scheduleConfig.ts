@@ -24,6 +24,8 @@ export interface ScheduleKind {
   /** 篩選群組（types = 群組內魚種） */
   filter: (groupId: number, types: Set<number>, entries: GroupEntry[]) => boolean;
   weight?: (groupId: number) => number;
+  /** 家園另訂的間隔（屋主特地放的魚出場頻率較高；SPEC-UGC §2.3）；省略 = 與公有地相同 */
+  home?: { intervalMs?: number; firstDelayMs?: number };
 }
 
 const subset = (types: Set<number>, allowed: number[]) => [...types].every((t) => allowed.includes(t));
@@ -70,6 +72,7 @@ export const SCHEDULE: ScheduleKind[] = [
     maxActive: 1,
     backfill: false,
     filter: (_id, types) => types.size === 1 && types.has(22),
+    home: { intervalMs: 45000 },
   },
   {
     kind: 'boss',
@@ -78,6 +81,7 @@ export const SCHEDULE: ScheduleKind[] = [
     maxActive: 1,
     backfill: false,
     filter: (id) => BOSS_GROUPS.includes(id),
+    home: { intervalMs: 50000, firstDelayMs: 10000 },
   },
 ];
 

@@ -6,6 +6,7 @@
  *     召喚列表中限定其他場景的魚（風神翼龍 / 蒼龍只在空中(黃昏)）反灰
  *   D「相機」：切換相機預設（CameraDefine，經 CameraControl）、即時調整 FOV / 位置 / 角度、複製設定；
  *     換場景時相機會依場景自動切換（SPEC §16.4），面板跟著 camera:change 同步
+ *   E「UGC」：加抽卡券、解鎖全部魚卡 / 場景 / 裝飾物、重置存檔（SPEC-UGC §10，toolType 200–202）
  * 面板是可拖曳的小視窗：拖標題列移動、右上鈕（或雙擊標題列）縮小 / 還原，位置與狀態記在 localStorage。
  * 只透過 GameContext / NetClient 存取遊戲（Feature 擴充機制的範例）。
  */
@@ -20,6 +21,7 @@ import { SCENE_DEFINES, SCENE_LIST, SceneType, sceneLimitLabel } from '@game/def
 import { CAMERA_PRESETS } from '@game/define/CameraDefine';
 import type { Fish } from '@game/world/Fish';
 import { DebugErrorCode, DebugToolType } from '@net/protocol';
+import { UgcDebugTool } from '@game/ugc/UgcProtocol';
 import type { FakeServer } from '@server-fake/FakeServer';
 import { buildSummonList, type SummonEntry } from './SummonList';
 import './debug.css';
@@ -90,6 +92,12 @@ export class DebugFeature implements GameFeature<GameContext> {
         <span>角度</span><input type="number" step="1" data-cam="rx" /><input type="number" step="1" data-cam="ry" /><input type="number" step="1" data-cam="rz" />
       </div>
       <button class="dbg-btn" data-act="cam-copy">複製設定</button>
+      <div class="dbg-section">UGC</div>
+      <div class="dbg-cam-presets">
+        <button class="dbg-cam-preset" data-act="ugc-tickets">+10 抽卡券</button>
+        <button class="dbg-cam-preset" data-act="ugc-unlock">解鎖全部</button>
+        <button class="dbg-cam-preset" data-act="ugc-reset">重置存檔</button>
+      </div>
       </div>`;
     ctx.ui.layers.popup.appendChild(p);
     this.panel = p;
@@ -181,7 +189,21 @@ export class DebugFeature implements GameFeature<GameContext> {
       case 'win-min':
         this.setMinimized(!this.minimized);
         break;
+      case 'ugc-tickets':
+        this.sendUgc(UgcDebugTool.AddTickets, 10);
+        break;
+      case 'ugc-unlock':
+        this.sendUgc(UgcDebugTool.UnlockAll);
+        break;
+      case 'ugc-reset':
+        if (window.confirm('確定要重置存檔？魚卡、場景、裝潢、金幣都會回到初始狀態。')) this.sendUgc(UgcDebugTool.ResetProfile);
+        break;
     }
+  }
+
+  /** UGC 測試工具（假 server DebugModule） */
+  private sendUgc(toolType: number, quantity = 0): void {
+    this.ctx.net.send('U2G_DEBUG_CLIENT_TOOL_USE_REQ', { toolType, target: 0, quantity });
   }
 
   // ------------------------------------------------------------------
@@ -276,6 +298,12 @@ export class DebugFeature implements GameFeature<GameContext> {
     } else if (ack.toolType === DebugToolType.Summon) {
       const entry = this.entries.find((e) => e.groupId === ack.target);
       this.ctx.ui.toast(`${ok ? '已召喚' : '召喚失敗'}：${entry?.label ?? ack.target}`);
+    } else if (ack.toolType === UgcDebugTool.AddTickets) {
+      this.ctx.ui.toast(ok ? '抽卡券 +10' : '加券失敗');
+    } else if (ack.toolType === UgcDebugTool.UnlockAll) {
+      this.ctx.ui.toast(ok ? '已解鎖全部魚卡 / 場景 / 裝飾物（每張卡碎片 +5）' : '解鎖失敗');
+    } else if (ack.toolType === UgcDebugTool.ResetProfile) {
+      this.ctx.ui.toast(ok ? '存檔已重置' : '重置失敗');
     } else if (ack.toolType === DebugToolType.ChangeScene) {
       this.scenePending = false;
       this.renderScene();
@@ -426,6 +454,10 @@ export class DebugFeature implements GameFeature<GameContext> {
       summon: (groupId: number) => this.send(DebugToolType.Summon, groupId),
       /** 換場景（同下拉選單；0 森林、1 沙漠、2 雪地、15 空中(黃昏)、6 監獄、4 墓地） */
       scene: (sceneType: number) => this.requestScene(sceneType),
+      /** UGC：加抽卡券 / 解鎖全部 / 重置存檔 */
+      tickets: (n = 10) => this.sendUgc(UgcDebugTool.AddTickets, n),
+      unlockAll: () => this.sendUgc(UgcDebugTool.UnlockAll),
+      resetProfile: () => this.sendUgc(UgcDebugTool.ResetProfile),
       /** 切換相機預設（0 = 第一種、1 = 第二種；換場景時會再依場景自動切換） */
       camera: (idx: number) => this.applyCameraPreset(idx),
       /** 對場上第一隻符合條件的魚模擬一則 server 擊殺通知 */

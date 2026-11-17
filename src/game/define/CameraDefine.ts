@@ -19,6 +19,8 @@ export interface CameraPreset {
    * 轉場以相機為中心由近到遠擴散，超過範圍的部分要等轉場結束才一次出現 → 看得較遠的相機要放大。
    */
   irisRange?: number;
+  /** 不是戰鬥用的相機（例如裝潢的俯視）：不開砲，所以不需要配子彈牆 */
+  nonCombat?: boolean;
 }
 
 /** CAMERA_PRESETS 的索引 */
@@ -27,6 +29,8 @@ export const CameraPresetId = {
   Default: 0,
   /** 第二種：殭屍專案監獄視角（監獄 / 墓地場景使用） */
   Zombie: 1,
+  /** 第三種：俯視（家園裝潢模式，SPEC-UGC §9） */
+  Decor: 2,
 } as const;
 export type CameraPresetIdValue = (typeof CameraPresetId)[keyof typeof CameraPresetId];
 
@@ -58,5 +62,18 @@ export const CAMERA_PRESETS: readonly CameraPreset[] = [
     ],
     // 監獄後牆 / 墓地遠景距相機約 730–800
     irisRange: 800,
+  },
+  {
+    // 家園裝潢：幾乎正上方往下看（略微前傾，看得到方塊的高度），畫面中心對準棋盤格中央（世界 (0, 80)）
+    name: '俯視',
+    setting: {
+      fov: 33,
+      near: 10,
+      far: 5000,
+      position: { x: 0, y: 12, z: 330 },
+      rotation: { x: 12, y: 0, z: 0 },
+    },
+    irisRange: 800,
+    nonCombat: true,
   },
 ];

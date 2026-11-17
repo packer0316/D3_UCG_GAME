@@ -45,6 +45,8 @@ export class FishSystem implements TimelineListener {
     this.ctx.net.on('G2U_ADD_GROUP_SYNC_NOTIFY', (d) => this.applySync(d, true));
     // 原版 TimelineSystem:RECV_G2U_CHANGE_SCENE_NOTIFY → ForceEnd：換場景一律清場
     this.ctx.net.on('G2U_CHANGE_SCENE_NOTIFY', () => this.clearAll());
+    // 換房（SPEC-UGC §2.1）：場上的魚清掉，等新房間的 106 同步
+    this.ctx.net.on('G2U_ROOM_DATA_NOTIFY', () => this.clearAll());
   }
 
   /** 清場：所有群組結束、場上的魚直接移除（不播死亡表演；死亡表演中的照常播完） */

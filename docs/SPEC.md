@@ -121,13 +121,15 @@ D3_UCG_GAME/
 │  ├─ server-fake/          假 Server（之後接真 server 時整包移除）
 │  │  ├─ FakeServer.ts      模組化 server 核心（訊息分派、tick、use(module)）
 │  │  ├─ LocalTransport.ts  頁內傳輸（模擬延遲、保序）
-│  │  ├─ modules/           RoomModule、ScriptModule、ShootModule
+│  │  ├─ ugc/               UGC：ProfileStore（存檔）、WorldModule（房間目錄）、GachaModule、HomeModule、npcHomes（SPEC-UGC）
+│  │  ├─ modules/           RoomModule（目前房間 / 輪替）、ScriptModule、ShootModule、DebugModule
 │  │  ├─ rtp/               RtpEngine（目標 RTP 110%）、統計
 │  │  └─ config/            scheduleConfig（群組排程）、payoutConfig（賠付表）
 │  ├─ game/                 遊戲本體（對應原版 System / Model / View）
 │  │  ├─ GameContext.ts     context、事件表、圖層
 │  │  ├─ Tokens.ts          服務 token
 │  │  ├─ define/            翻譯自原版 Define：Display / Fish / Cannon / Bullet / Scene / Reward / Sound
+│  │  ├─ ugc/               UGC 規則（純邏輯，client 與假 server 共用）：魚卡、培養、抽卡、家園、裝飾物、掉券、協定（SPEC-UGC §11.1）
 │  │  ├─ path/              PathMove 翻譯：PathTrack（cardinal / bezier / wait marker）、PathTypes
 │  │  ├─ timeline/          FishTimeline / SubTimeline（群組時鐘、晚加入快轉）
 │  │  ├─ systems/           SeatSystem、FishSystem、ShootingSystem、RewardSystem（+ SmallWinShow）、
@@ -141,8 +143,9 @@ D3_UCG_GAME/
 │  ├─ ui/                   DOM HUD：UIRoot（設計座標圖層）、Hud（座位面板、房間）；
 │  │                        SkillPanel（右側技能按鈕，overlay 載入原版 Card.csd）
 │  └─ features/             可插拔功能
-│     ├─ debug/             出獎模式開關、召喚魚選單（§13.7）
-│     └─ (gacha/、bossShow/ 下一階段)
+│     ├─ debug/             出獎模式開關、召喚魚選單、場景、相機、UGC 測試工具（§13.7）
+│     ├─ ugc/               UGC 家園：UgcClient、ui/（功能列 + 房間 / 魚卡 / 抽卡 / 家園面板）、decor/（裝潢）、fx/（SPEC-UGC）
+│     └─ (bossShow/ 之後)
 └─ tests/                   Vitest
 ```
 
@@ -501,6 +504,8 @@ interface GameFeature {
 
 ## 10. 下一階段：抽卡（Gacha）預留
 
+> **已實作，併入 UGC 家園版**：抽卡、魚卡培養、玩家家園、裝潢見 [SPEC-UGC.md](SPEC-UGC.md)（§17）。以下是當初的預留設計，保留作紀錄。
+
 - `features/gacha/`：`GachaFeature`（install 時註冊按鈕、面板、render pass）、`GachaSystem`（狀態）、`GachaView`（卡牌 3D 展示，可用原版 `Card.csb` / `ItemCard` 素材）。
 - `server-fake/modules/GachaModule`：卡池、機率表、保底、扣款；訊息 `U2G_GACHA_DRAW_REQ` / `G2U_GACHA_DRAW_ACK`。
 - UI 走 `UIRoot` 的 `panel` / `modal` 圖層，不碰戰鬥 HUD。
@@ -520,6 +525,7 @@ interface GameFeature {
 | M6 | 魚種 15–17、22–28 + 魚身 EFK（§14） | 召喚每個群組都能正常走完路徑、可打、可擊殺 | ✅ |
 | M7 | debug 場景下拉選單、空中(黃昏) 場景、場景限定魚種（§15） | 天空 flowmap 流動、轉場雙向正常；風神 / 蒼龍只在空中(黃昏) 出現與召喚 | ✅ |
 | M8 | 殭屍專案 監獄 / 墓地 場景、依場景自動切換相機（§16） | 兩場景材質正確（墓地雲 / 月亮流動）、監獄門牆掛件；切到監獄 / 墓地相機自動換第二種、其他第一種；轉場不露底色 | ✅ |
+| M9 | UGC 家園版（§17、[SPEC-UGC.md](SPEC-UGC.md)）：公有地 + 玩家家園、抽卡券 / 抽卡 / 培養、家園設定、抽成、裝潢 | Vitest 43 項 + 無頭瀏覽器實測全流程 | ✅ |
 
 ---
 
@@ -962,3 +968,19 @@ interface GameFeature {
 | 地板倒影 | `FishFloorReflection`（監獄） |
 | 魚的 MatCap / 監獄囚衣貼圖 | 殭屍專案 `ModelMgr:setMatCapTexture`、`PrisonScene_Sprite3d_Texture`（DT3 魚種不適用） |
 | 魚可見範圍 | `FishVisibleZoneMgr` / `SceneVisibleRectDefine` |
+
+---
+
+## 17. UGC 家園版
+
+把遊戲改成「每個玩家都有自己的家園」的版本，規格獨立成一份：**[SPEC-UGC.md](SPEC-UGC.md)**。
+
+- 1 號房公有地（所有龍、所有場景輪流）、2 號房我的家園、3–10 號房 NPC 家園。
+- 新玩家只有初始 11 種龍與森林；其他龍 / 場景 / 裝飾物靠打龍掉抽卡券 → 抽卡取得；龍可以培養（倍率變高、更難打死）。
+- 屋主設定場景輪替與放出的龍（每格最多 3 種 Boss、天空 Boss 只能放天空場景）；訪客打龍屋主拿抽成。
+- 裝潢模式：俯視 + 棋盤格擺放裝飾物（這一版是佔位方塊）。
+- 對戰鬥本體（本文件 §1–§16）的影響：
+  - 假 server 的房間從「單一房間」變成「目前所在的房間」，場景依輪替表自動換（§15 的 debug 換場景照舊可用）。
+  - 魚群排程依房間允許的魚種過濾（群組裡不允許的魚出場即標成死亡）。
+  - 餘額改存在玩家資產（瀏覽器 localStorage），重新整理不會回到初始值。
+  - 左上角的房間名稱改由 UGC 功能列顯示。

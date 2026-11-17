@@ -55,7 +55,9 @@ export class SceneSystem {
     const camera = this.ctx.services.get(Tokens.CameraControl);
     const preset = def.camera ?? CameraPresetId.Default;
     let prevCamera: THREE.Camera | null = null;
-    if (camera.preset !== preset) {
+    camera.scenePreset = preset;
+    // 裝潢模式覆寫相機中：不換（離開裝潢時 CameraControl 會回到 scenePreset）
+    if (!camera.overridden && camera.preset !== preset) {
       prevCamera = this.ctx.stage.camera.clone();
       camera.applyPreset(preset);
     }

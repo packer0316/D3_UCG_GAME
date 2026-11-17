@@ -22,8 +22,10 @@ import type { PointerRouter } from '@engine/input/PointerRouter';
 import type { SpecialBulletTypeId } from './define/BulletDefine';
 import type { SkillButtonId } from './define/SkillDefine';
 import type { BulletBehaviorRegistry } from './bullet/BulletTypes';
+import type { HomeIncome, PlayerProfile, RoomState } from './ugc/UgcTypes';
 
 export interface GameEvents {
+  /** 進房（每次收到房間資料都會送：登入、換房、家園設定改了重新開始） */
   'room:ready': { yourSeat: number; roomName: string; betList: number[] };
   'seat:update': { seat: number; data: SeatData | null };
   /** 顯示用餘額（含本地預扣） */
@@ -49,11 +51,24 @@ export interface GameEvents {
   'scene:change': { sceneType: number };
   /** 相機預設改變（場景自動切換 / debug 手動切換；CameraPresetId） */
   'camera:change': { preset: number };
+  // ---- UGC（SPEC-UGC §11.3）
+  /** 玩家資產更新（完整快照） */
+  'ugc:profile': { profile: PlayerProfile };
+  /** 房間內容更新（進房、換場景格、等級 / 裝潢改變） */
+  'ugc:room': { room: RoomState };
+  /** 家園收益更新 */
+  'ugc:income': HomeIncome;
+  /** 我在這間房貢獻給屋主的抽成 */
+  'ugc:commission': { total: number };
+  /** 進入 / 離開裝潢模式 */
+  'ugc:decor': { active: boolean };
 }
 
 export interface GameLayers {
   /** 3D：場景 */
   bg: THREE.Group;
+  /** 3D：家園裝潢（場景之上、魚之下） */
+  deco: THREE.Group;
   /** 3D：魚 */
   fish: THREE.Group;
   /** 3D：子彈 */

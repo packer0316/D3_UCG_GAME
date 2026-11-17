@@ -26,6 +26,8 @@ export class SeatSystem {
       this.betList = [...d.betList].sort((a, b) => a - b);
       this.seats = d.seats;
       const self = d.seats[d.yourseat];
+      // 換房：飛行中的子彈 server 已退款，房間資料帶的是最新餘額
+      this.pending.clear();
       this.serverMoney = self?.money ?? 0;
       const bi = this.betList.indexOf(self?.bet ?? this.betList[0]);
       this.betIndex = bi >= 0 ? bi : 0;

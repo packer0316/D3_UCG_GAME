@@ -1,6 +1,14 @@
 /**
  * 射擊：開砲扣款（押注 × 成本倍率）、命中判定（RtpEngine，可一次多條魚）、DUD 退款。
+ *
+ * UGC（SPEC-UGC §4、§7、§8.2）：
+ * - 家園：魚卡等級 → 賠率倍率（中獎機率等比例變低）
+ * - 別人的家園：命中的子彈抽成給屋主（開砲成本 × 抽成率），這顆子彈的 RTP = 目標 − 抽成率
+ * - 公有地 / 別人的家園：中獎時擲抽卡券（自己的家園不掉）
  */
+import '@game/ugc/UgcProtocol';
+import { commissionRate, levelMultiplier } from '@game/ugc/CultivateRule';
+import { ticketDrop } from '@game/ugc/TicketRule';
 import type { FakeServer, FakeServerModule } from '../FakeServer';
 
 /** SpecialBulletType → 成本倍率（BulletDefine.lua SpecialBulletDefine） */
@@ -29,8 +37,10 @@ export class ShootModule implements FakeServerModule {
       const seat = room().self;
       const rate = COST_RATE[req.bulletType];
       const cost = req.bet * (rate ?? 1);
-      if (rate === undefined || !room().betList.includes(req.bet) || seat.money < cost) {
-        server.send('G2U_SHOOT_REJECT', { bulletId: req.bulletId, reason: seat.money < cost ? 'money' : 'bet', seatMoney: seat.money });
+      // 裝潢模式不能開砲
+      const reason = room().editing ? 'edit' : rate === undefined || !room().betList.includes(req.bet) ? 'bet' : seat.money < cost ? 'money' : null;
+      if (reason) {
+        server.send('G2U_SHOOT_REJECT', { bulletId: req.bulletId, reason, seatMoney: seat.money });
         return;
       }
       room().addMoney(-cost);
@@ -57,18 +67,27 @@ export class ShootModule implements FakeServerModule {
         this.refund(req.bulletId, b);
         return;
       }
+      // 魚卡等級 → 倍率；別人的家園：抽成（依被打中的龍的等級，多隻取平均）從這顆子彈的 RTP 扣
+      const levels = targets.map((t) => room().fishLevel(t.fish.fishType));
+      const othersHome = room().isOthersHome;
+      const rate = othersHome ? levels.reduce((s, l) => s + commissionRate(l), 0) / levels.length : 0;
+      if (rate > 0) room().addVisitCommission(b.cost * rate);
       // 一顆子彈的成本（押注 × 倍率）以注水法分攤給命中的魚 → 每顆子彈期望回收 = RTP × 成本
       const results = server.rtp.judgeMulti(
         targets.map((t) => t.fish.fishType),
         b.bet,
         b.cost / b.bet,
+        { rtp: server.rtp.targetRtp - rate, mults: levels.map(levelMultiplier) },
       );
+      // 自己的家園不掉券
+      const dropsTickets = !room().current.isMine;
       targets.forEach(({ id, fish }, i) => {
         const result = results[i];
         if (!result.win || !result.outcome) return;
         const money = room().addMoney(result.money);
         const unDead = !!result.outcome.unDead;
         if (!unDead) server.script.killFish(id);
+        if (dropsTickets) this.rollTicket(id, fish.fishType, unDead, b.bet, levels[i], othersHome);
         server.send('G2U_KILL_FLOATODDS_FISH_NOTIFY', {
           accountId: room().self.accountId,
           scriptIdData: id,
@@ -94,10 +113,27 @@ export class ShootModule implements FakeServerModule {
     });
   }
 
+  /** 中獎擲抽卡券；掉了就在擊殺通知之前送（client 還找得到那隻魚的位置） */
+  private rollTicket(id: { groupIndex: number; fishIndex: number }, fishType: number, unDead: boolean, bet: number, level: number, levelBonus: boolean): void {
+    const drop = ticketDrop(fishType, unDead, bet, level, levelBonus);
+    if (this.server.rng.next() >= drop.chance) return;
+    const store = this.server.profile;
+    store.profile.tickets += drop.count;
+    store.profile.stats.ticketsEarned += drop.count;
+    store.markDirty();
+    this.server.send('G2U_TICKET_DROP_NOTIFY', { scriptIdData: id, count: drop.count, tickets: store.profile.tickets });
+  }
+
   private refund(bulletId: number, b: ServerBullet): void {
     const refund = this.refundDud ? b.cost : 0;
     const money = this.server.room.addMoney(refund);
     this.server.send('G2U_DUD_ACK', { bulletId, seatMoney: money, refund });
+  }
+
+  /** 換房：飛行中的子彈全部退款（不逐顆通知，房間資料會帶最新餘額） */
+  refundAll(): void {
+    for (const b of this.bullets.values()) if (this.refundDud) this.server.room.addMoney(b.cost);
+    this.bullets.clear();
   }
 
   tick(now: number): void {

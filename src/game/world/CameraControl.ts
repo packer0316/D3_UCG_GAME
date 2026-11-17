@@ -14,6 +14,10 @@ import type { PlayField } from './PlayField';
 export class CameraControl {
   /** 目前套用的預設（舞台建立時 = 第一種；-1 = debug 微調過） */
   private current: number = CameraPresetId.Default;
+  /** 目前場景要的預設（覆寫結束後回到這個） */
+  scenePreset: number = CameraPresetId.Default;
+  /** 覆寫中的預設（裝潢模式的俯視相機）；null = 沒有覆寫 */
+  private override: number | null = null;
 
   constructor(
     private readonly stage: Stage,
@@ -34,6 +38,17 @@ export class CameraControl {
     this.current = id;
     this.events.emit('camera:change', { preset: id });
     return true;
+  }
+
+  /** 覆寫中：場景切換不換相機（只記下場景要的預設） */
+  get overridden(): boolean {
+    return this.override !== null;
+  }
+
+  /** 覆寫相機（裝潢模式）；null = 結束覆寫，回到場景的預設 */
+  setOverride(id: number | null): void {
+    this.override = id;
+    this.applyPreset(id ?? this.scenePreset);
   }
 
   /** debug 微調：只換相機，牆沿用目前預設的 */

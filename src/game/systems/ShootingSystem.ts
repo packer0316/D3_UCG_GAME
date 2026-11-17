@@ -143,6 +143,8 @@ export class ShootingSystem implements BulletHost {
     stage.onResize(() => {
       for (const c of this.cannons.values()) this.placeCannon(c);
     });
+    // 換房（SPEC-UGC §2.1）：飛行中的子彈直接清掉（server 已退款，不送 DUD）
+    net.on('G2U_ROOM_DATA_NOTIFY', () => this.clearBullets());
     this.ctx.input.add({
       priority: 0,
       down: (p) => this.onPointerDown(p),
@@ -387,6 +389,17 @@ export class ShootingSystem implements BulletHost {
     if (bullet.isSelf) this.ctx.net.send('U2G_DUD_REQ', { bulletId: bullet.id });
     this.hitFx?.play(bullet.seat, point, bullet.def.hitFx);
     this.removeBullet(bullet);
+  }
+
+  /** 清掉所有飛行中的子彈與雷射光束（不通知 server） */
+  clearBullets(): void {
+    for (const b of [...this.normals, ...this.lockShots]) b.destroy();
+    this.normals = [];
+    this.lockShots = [];
+    this.beam?.end();
+    this.holding = false;
+    this.releaseAt = -1;
+    this.clickLock = false;
   }
 
   private removeBullet(b: ActiveBullet | NormalBullet): void {

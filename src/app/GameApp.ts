@@ -4,7 +4,7 @@
  * 啟動流程：
  *   1. Stage / Assets / EFK / Audio
  *   2. 資料（PathData / GroupData / FishData）
- *   3. 通訊：LocalTransport + FakeServer（之後換 WebSocketTransport）
+ *   3. 通訊：LocalTransport + FakeServer（之後換 WebSocketTransport；UGC 規則也在假 server，見 docs/SPEC-UGC.md）
  *   4. 系統（Seat / Fish / Shooting / Reward）+ HUD + Features
  *   5. 預載資源 → 登入 → 進房同步腳本 → 主迴圈
  */
@@ -90,6 +90,7 @@ export class GameApp {
 
     const layers: GameLayers = {
       bg: new THREE.Group(),
+      deco: new THREE.Group(),
       fish: new THREE.Group(),
       bullet: new THREE.Group(),
       cannon: new THREE.Group(),
@@ -98,7 +99,7 @@ export class GameApp {
       ui: new THREE.Group(),
     };
     for (const [k, g] of Object.entries(layers)) g.name = `layer_${k}`;
-    stage.scene.add(layers.bg, layers.fish, layers.bullet, layers.cannon);
+    stage.scene.add(layers.bg, layers.deco, layers.fish, layers.bullet, layers.cannon);
     stage.overlay.add(layers.hitFx, layers.reward, layers.ui);
     const csd = new CsdLibrary(assets);
     const input = new PointerRouter(stage);
@@ -215,10 +216,14 @@ export class GameApp {
     await this.features.installAll(createFeatures());
 
     // ---- 7. 登入 → 進房同步
-    events.once('room:ready', () => {
+    // 自動設定面板：第一次進房後建立（存檔 key 需要 accountId），並向 server 要可選魚種清單
+    events.once('room:ready', () => aiPanel.init());
+    // 每次進房（登入、換房，SPEC-UGC §2.1）：停掉自動 / 鎖定，重新同步魚群
+    events.on('room:ready', () => {
+      aiAuto.stop();
+      this.skills.set('AutoShoot', false);
+      this.lock.clear();
       net.send('U2G_SYNC_SCRIPT_REQ', {});
-      // 自動設定面板：進房後建立（存檔 key 需要 accountId），並向 server 要可選魚種清單
-      aiPanel.init();
     });
     net.send('U2G_LOGIN_REQ', {});
     await net.wait('G2U_SYNC_SCRIPT_ACK').catch((e) => console.error(e));
