@@ -6,6 +6,7 @@
  *     召喚列表中限定其他場景的魚（風神翼龍 / 蒼龍只在空中(黃昏)）反灰
  *   D「相機」：切換相機預設（CameraDefine，經 CameraControl）、即時調整 FOV / 位置 / 角度、複製設定；
  *     換場景時相機會依場景自動切換（SPEC §16.4），面板跟著 camera:change 同步
+ * 面板是可拖曳的小視窗：拖標題列移動、右上鈕（或雙擊標題列）縮小 / 還原，位置與狀態記在 localStorage。
  * 只透過 GameContext / NetClient 存取遊戲（Feature 擴充機制的範例）。
  */
 import type { GameFeature } from '@core/feature/Feature';
@@ -37,6 +38,8 @@ const CAM_FIELDS: Record<string, (c: CameraSetting, v?: number) => number> = {
 const cloneCam = (c: CameraSetting): CameraSetting => ({ ...c, position: { ...c.position }, rotation: { ...c.rotation } });
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
 const CN_NUM = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+/** 視窗位置 / 縮小狀態（每台瀏覽器各自記） */
+const DEBUG_WINDOW_KEY = 'd3.debug.window';
 
 export class DebugFeature implements GameFeature<GameContext> {
   readonly id = 'debug';
@@ -53,6 +56,8 @@ export class DebugFeature implements GameFeature<GameContext> {
   private camPresets!: HTMLDivElement;
   private camInputs: HTMLInputElement[] = [];
   private cam!: CameraSetting;
+  private panel!: HTMLDivElement;
+  private minimized = false;
 
   install(ctx: GameContext): void {
     this.ctx = ctx;
@@ -61,7 +66,11 @@ export class DebugFeature implements GameFeature<GameContext> {
     const p = document.createElement('div');
     p.className = 'debug-panel ui-interactive';
     p.innerHTML = `
-      <div class="debug-title">DEBUG <small>(\` 鍵開關)</small></div>
+      <div class="debug-titlebar">
+        <div class="debug-title">DEBUG <small>(\` 鍵開關)</small></div>
+        <button class="debug-win-btn" data-act="win-min"></button>
+      </div>
+      <div class="debug-body">
       <button class="dbg-btn dbg-cheat" data-act="cheat"></button>
       <label class="dbg-scene">場景<select></select></label>
       <button class="dbg-btn dbg-summon" data-act="summon">召喚魚 ▾</button>
@@ -80,8 +89,10 @@ export class DebugFeature implements GameFeature<GameContext> {
         <span>位置</span><input type="number" step="1" data-cam="px" /><input type="number" step="1" data-cam="py" /><input type="number" step="1" data-cam="pz" />
         <span>角度</span><input type="number" step="1" data-cam="rx" /><input type="number" step="1" data-cam="ry" /><input type="number" step="1" data-cam="rz" />
       </div>
-      <button class="dbg-btn" data-act="cam-copy">複製設定</button>`;
+      <button class="dbg-btn" data-act="cam-copy">複製設定</button>
+      </div>`;
     ctx.ui.layers.popup.appendChild(p);
+    this.panel = p;
     this.cheatBtn = p.querySelector('.dbg-cheat')!;
     this.sceneSelect = p.querySelector('.dbg-scene select')!;
     this.sceneSelect.innerHTML =
@@ -98,8 +109,11 @@ export class DebugFeature implements GameFeature<GameContext> {
     this.filter.addEventListener('input', () => this.renderList());
     for (const input of this.camInputs) input.addEventListener('input', () => this.onCamInput(input));
     window.addEventListener('keydown', (e) => {
-      if (e.key === '`' && !(document.activeElement instanceof HTMLInputElement)) p.classList.toggle('hidden');
+      if (e.key !== '`' || document.activeElement instanceof HTMLInputElement) return;
+      p.classList.toggle('hidden');
+      if (!p.classList.contains('hidden')) this.clampWindow();
     });
+    this.setupWindow();
 
     ctx.net.on('G2U_DEBUG_CLIENT_TOOL_USE_ACK', (ack) => this.onAck(ack));
     // 進房 / 換場景：同步選單、召喚列表的場景限制
@@ -164,6 +178,91 @@ export class DebugFeature implements GameFeature<GameContext> {
       case 'cam-copy':
         this.copyCamera();
         break;
+      case 'win-min':
+        this.setMinimized(!this.minimized);
+        break;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 視窗：標題列拖曳、縮小 / 還原（位置與縮小狀態記在 localStorage）
+  // ------------------------------------------------------------------
+
+  private setupWindow(): void {
+    const p = this.panel;
+    const bar = p.querySelector<HTMLElement>('.debug-titlebar')!;
+    const onButton = (e: Event) => (e.target as HTMLElement).closest('button') !== null;
+    let drag: { id: number; x: number; y: number; left: number; top: number } | null = null;
+
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || onButton(e)) return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, left: p.offsetLeft, top: p.offsetTop };
+      bar.setPointerCapture(e.pointerId);
+      p.classList.add('dragging');
+    });
+    bar.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      // 面板在 UI 設計座標層（依 designScale 縮放）裡：螢幕位移要換回設計座標
+      const s = this.ctx.stage.designScale || 1;
+      this.moveWindow(drag.left + (e.clientX - drag.x) / s, drag.top + (e.clientY - drag.y) / s);
+    });
+    const end = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      p.classList.remove('dragging');
+      this.saveWindow();
+    };
+    bar.addEventListener('pointerup', end);
+    bar.addEventListener('pointercancel', end);
+    // 雙擊標題列 = 縮小 / 還原
+    bar.addEventListener('dblclick', (e) => {
+      if (!onButton(e)) this.setMinimized(!this.minimized);
+    });
+    this.ctx.ui.onResize(() => this.clampWindow());
+
+    const saved = this.loadWindow();
+    if (saved) this.moveWindow(saved.x, saved.y);
+    this.setMinimized(saved?.min ?? false, false);
+  }
+
+  private setMinimized(min: boolean, save = true): void {
+    this.minimized = min;
+    this.panel.classList.toggle('min', min);
+    const btn = this.panel.querySelector<HTMLButtonElement>('.debug-win-btn')!;
+    btn.textContent = min ? '□' : '—';
+    btn.title = min ? '還原' : '縮小';
+    this.clampWindow();
+    if (save) this.saveWindow();
+  }
+
+  /** 移動並把整個視窗夾在畫面內（比畫面高時貼齊上緣，標題列永遠看得到）；還原時也會往回推 */
+  private moveWindow(x: number, y: number): void {
+    const p = this.panel;
+    const maxX = Math.max(0, this.ctx.ui.width - p.offsetWidth);
+    const maxY = Math.max(0, this.ctx.ui.height - p.offsetHeight);
+    p.style.left = `${Math.round(Math.min(Math.max(x, 0), maxX))}px`;
+    p.style.top = `${Math.round(Math.min(Math.max(y, 0), maxY))}px`;
+  }
+
+  private clampWindow(): void {
+    if (!this.panel.classList.contains('hidden')) this.moveWindow(this.panel.offsetLeft, this.panel.offsetTop);
+  }
+
+  private loadWindow(): { x: number; y: number; min: boolean } | null {
+    try {
+      const v = JSON.parse(localStorage.getItem(DEBUG_WINDOW_KEY) ?? 'null');
+      return v && Number.isFinite(v.x) && Number.isFinite(v.y) ? { x: v.x, y: v.y, min: !!v.min } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private saveWindow(): void {
+    try {
+      const p = this.panel;
+      localStorage.setItem(DEBUG_WINDOW_KEY, JSON.stringify({ x: p.offsetLeft, y: p.offsetTop, min: this.minimized }));
+    } catch {
+      // 無痕 / 封鎖儲存：不記也能用
     }
   }
 
