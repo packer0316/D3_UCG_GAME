@@ -7,7 +7,7 @@ import type { ClientToServer, NetMessage, ScriptIdData, ServerToClient } from '.
 import type { Transport } from '../src/net/Transport';
 import '../src/game/ugc/UgcProtocol';
 import { UgcDebugTool } from '../src/game/ugc/UgcProtocol';
-import { SceneType, isFishAllowedInScene } from '../src/game/define/SceneDefine';
+import { SCENE_LIST, SceneType, isFishAllowedInScene } from '../src/game/define/SceneDefine';
 import type { FishDataFile, GroupDataMap } from '../src/game/path/PathTypes';
 import { expandCards } from '../src/game/ugc/CardDefine';
 import { commissionRate, levelMultiplier } from '../src/game/ugc/CultivateRule';
@@ -118,14 +118,14 @@ function shootAt(h: Harness, target: ScriptIdData, bet = 500) {
 }
 
 describe('房間', () => {
-  it('登入：送資產、房間內容、房間資料；先進 1 號房公有地（7 個場景、所有魚種）', () => {
+  it('登入：送資產、房間內容、房間資料；公有地包含完整場景輪替及允許魚種', () => {
     const h = boot();
     login(h);
     const cmds = h.sent.map((m) => m.cmd);
     expect(cmds.slice(0, 4)).toEqual(['G2U_PROFILE_NOTIFY', 'G2U_ROOM_INFO_NOTIFY', 'G2U_ROOM_DATA_NOTIFY', 'G2U_HOME_INCOME_NOTIFY']);
     const { room } = h.last('G2U_ROOM_INFO_NOTIFY')!;
     expect(room).toMatchObject({ roomId: PUBLIC_ROOM_ID, kind: 'public', isMine: false, name: '1號房 公有地' });
-    expect(room.slots).toHaveLength(7);
+    expect(room.slots.map(s => s.sceneType)).toEqual(SCENE_LIST);
     for (const s of room.slots) for (const t of s.fishTypes) expect(isFishAllowedInScene(t, s.sceneType)).toBe(true);
     const data = h.last('G2U_ROOM_DATA_NOTIFY')!;
     expect(data.roomName).toBe('1號房 公有地');
@@ -573,7 +573,7 @@ describe('存檔 / debug', () => {
     expect(h.profile.tickets).toBe(35);
     tool(UgcDebugTool.UnlockAll);
     expect(Object.keys(h.profile.fish)).toHaveLength(23);
-    expect(h.profile.scenes).toHaveLength(6);
+    expect(h.profile.scenes).toHaveLength(10);
     expect(h.profile.decos.plate_gold).toBe(5);
     tool(UgcDebugTool.ResetProfile);
     expect(h.profile.tickets).toBe(10);

@@ -13,9 +13,11 @@ import {
 } from '../src/game/define/SceneDefine';
 
 describe('場景表（SPEC §15 / §16 / §18）', () => {
-  it('SCENE_LIST 都有定義；殭屍場景之後接程序化場景（月球）', () => {
+  it('SCENE_LIST 都有定義，保留舊場景順序並加入三座聖域', () => {
     for (const t of SCENE_LIST) expect(SCENE_DEFINES[t]?.type).toBe(t);
-    expect(SCENE_LIST.slice(-3)).toEqual([SceneType.ZB_Prison, SceneType.ZB_Cemetery, SceneType.Space_Moon]);
+    expect(SCENE_LIST.slice(4, 7)).toEqual([SceneType.ZB_Prison, SceneType.ZB_Cemetery, SceneType.Space_Moon]);
+    expect(new Set(SCENE_LIST).size).toBe(SCENE_LIST.length);
+    expect(SCENE_LIST.slice(-3)).toEqual([SceneType.Rose_Castle, SceneType.Tide_Palace, SceneType.Maple_Shrine]);
   });
 
   it('每個場景不是有模型就是程序化場景（月球沒有模型檔）', () => {
@@ -27,8 +29,8 @@ describe('場景表（SPEC §15 / §16 / §18）', () => {
     expect(GROUND_SCENES).toContain(SceneType.Space_Moon);
   });
 
-  it('監獄 / 墓地 / 月球用第二種相機，其他場景用第一種', () => {
-    const zombieCamera: number[] = [SceneType.ZB_Prison, SceneType.ZB_Cemetery, SceneType.Space_Moon];
+  it('監獄 / 墓地與新增程序化場景用第二種相機，舊場景用第一種', () => {
+    const zombieCamera: number[] = [SceneType.ZB_Prison, SceneType.ZB_Cemetery, SceneType.Space_Moon, SceneType.Rose_Castle, SceneType.Tide_Palace, SceneType.Maple_Shrine];
     for (const t of SCENE_LIST) {
       const zombie = zombieCamera.includes(t);
       expect(SCENE_DEFINES[t].camera ?? CameraPresetId.Default).toBe(zombie ? CameraPresetId.Zombie : CameraPresetId.Default);
@@ -40,7 +42,7 @@ describe('場景表（SPEC §15 / §16 / §18）', () => {
   it('殭屍場景是地面場景：地面 Boss 可出現、天空 Boss 不行', () => {
     expect(GROUND_SCENES).toEqual(expect.arrayContaining([SceneType.ZB_Prison, SceneType.ZB_Cemetery]));
     expect(GROUND_SCENES).not.toContain(SceneType.Boss_Sky_Dusk);
-    for (const t of [SceneType.ZB_Prison, SceneType.ZB_Cemetery]) {
+    for (const t of [SceneType.ZB_Prison, SceneType.ZB_Cemetery, SceneType.Rose_Castle, SceneType.Tide_Palace, SceneType.Maple_Shrine]) {
       expect(isFishAllowedInScene(FishType.TRex, t)).toBe(true);
       expect(isFishAllowedInScene(FishType.AzureDragon, t)).toBe(false);
       expect(sceneLimitLabel([FishType.Quetzalcoatlus], t)).toBe('空中(黃昏)');

@@ -61,6 +61,10 @@ export class DecorMode {
   private readonly hint = el('div', 'ugc-decor-hint');
   private readonly count = el('span', 'ugc-decor-count');
   private readonly palette = el('div', 'ugc-decor-palette');
+  private readonly allFilter = el('button', 'ugc-decor-filter');
+  private readonly ownedFilter = el('button', 'ugc-decor-filter');
+  private paletteFilter: 'all' | 'owned' = 'all';
+  private inventoryKey = '';
 
   /** 進入時被藏起來的圖層（離開時還原） */
   private hidden: THREE.Object3D[] = [];
@@ -97,6 +101,19 @@ export class DecorMode {
       b.addEventListener('click', fn);
       return b;
     };
+    const setFilter = (filter: 'all' | 'owned') => {
+      this.paletteFilter = filter;
+      this.renderPalette();
+      this.palette.scrollLeft = 0;
+    };
+    this.allFilter.addEventListener('click', () => setFilter('all'));
+    this.ownedFilter.addEventListener('click', () => setFilter('owned'));
+    const scrollButton = (direction: -1 | 1) => {
+      const b = el('button', 'ugc-decor-scroll', direction < 0 ? '‹' : '›');
+      b.setAttribute('aria-label', direction < 0 ? '向左瀏覽造物' : '向右瀏覽造物');
+      b.addEventListener('click', () => this.palette.scrollBy({ left: direction * this.palette.clientWidth * 0.8, behavior: 'smooth' }));
+      return b;
+    };
     this.dom = el(
       'div',
       'ugc-decor hidden',
@@ -113,10 +130,22 @@ export class DecorMode {
         button('完成', 'primary', () => void this.leave(true)),
       ),
       this.hint,
-      el('div', 'ugc-decor-tray ui-interactive', this.palette),
+      el('div', 'ugc-decor-tray ui-interactive',
+        el('div', 'ugc-decor-catalog-bar',
+          this.allFilter, this.ownedFilter,
+          el('span', 'ugc-decor-catalog-hint', '未擁有的造物可由抽卡取得'),
+          scrollButton(-1), scrollButton(1),
+        ),
+        this.palette,
+      ),
     );
     for (const node of this.dom.querySelectorAll('.ui-interactive')) node.addEventListener('pointerdown', (e) => e.stopPropagation());
     ctx.ui.layers.panel.appendChild(this.dom);
+    ctx.events.on('ugc:profile', () => {
+      if (!this.active || this.inventoryKey === JSON.stringify(this.ugc.profile?.decos ?? {})) return;
+      if (this.hand && this.remaining(this.hand.id) <= 0) this.hand = null;
+      this.refresh();
+    });
 
     // 裝潢模式中，canvas 上的指標都歸這裡（優先於技能按鈕與射擊）
     ctx.input.add({
@@ -157,6 +186,8 @@ export class DecorMode {
     this.items = (this.ugc.profile?.home.deco ?? []).map((d) => ({ ...d }));
     this.hand = null;
     this.hover = null;
+    this.paletteFilter = 'all';
+    this.palette.scrollLeft = 0;
 
     // 場上清空（server 已暫停魚群）、停止自動與鎖定
     ctx.services.get(Tokens.AIAutoSystem).stop();
@@ -343,36 +374,52 @@ export class DecorMode {
     this.count.textContent = `已擺放 ${this.items.length} / ${MAX_DECO_ITEMS}`;
     const def = this.hand && getDecoDefine(this.hand.id);
     this.hint.textContent = def
-      ? `點格子放下「${def.name}」　R 旋轉　右鍵 / Esc 收回`
+      ? `「${def.name}」占 ${def.w*def.d} 格（${decoFootprint(def,this.hand!.rot).w}×${decoFootprint(def,this.hand!.rot).d}）　點格子放下 · R 旋轉 · 右鍵 / Esc 收回`
       : '點下方的物品拿起來擺放；點已經擺好的物品可以拿起來移動';
   }
 
   private renderPalette(): void {
+    const scrollLeft = this.palette.scrollLeft;
+    const focusedId = this.palette.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement).dataset.decoId : undefined;
     clear(this.palette);
     const owned = this.ugc.profile?.decos ?? {};
+    this.inventoryKey = JSON.stringify(owned);
+    this.allFilter.textContent = `全部造物（${DECO_DEFINES.length}）`;
+    this.ownedFilter.textContent = `已擁有（${DECO_DEFINES.filter((d) => (owned[d.id] ?? 0) > 0).length}）`;
+    this.allFilter.setAttribute('aria-pressed', String(this.paletteFilter === 'all'));
+    this.ownedFilter.setAttribute('aria-pressed', String(this.paletteFilter === 'owned'));
     let any = false;
-    for (const def of DECO_DEFINES) {
+    for (const def of [...DECO_DEFINES].sort((a,b)=>Number(!!b.model)-Number(!!a.model))) {
       const total = owned[def.id] ?? 0;
-      if (total <= 0) continue;
+      if (this.paletteFilter === 'owned' && total <= 0) continue;
       any = true;
       const left = this.remaining(def.id);
       const on = this.hand?.id === def.id;
+      const locked = total <= 0;
       const tile = el(
         'button',
-        `ugc-decor-item${on ? ' on' : ''}${left <= 0 && !on ? ' empty' : ''}`,
-        decoIcon(def, 44),
+        `ugc-decor-item${on ? ' on' : ''}${locked ? ' unowned' : left <= 0 && !on ? ' empty' : ''}`,
+        decoIcon(def, 54),
         el('span', 'ugc-card-name', def.name),
-        el('span', 'ugc-card-lv', `剩 ${left} / ${total}`),
+        el('span', 'ugc-card-lv', locked ? '未擁有 · 抽卡取得' : `剩 ${left} / ${total}`),
       );
+      tile.dataset.decoId=def.id;
+      tile.setAttribute('aria-pressed',String(on));
+      tile.setAttribute('aria-disabled', String(left <= 0 && !on));
+      tile.title=`${def.name} · ${def.w*def.d} 格（${def.w}×${def.d}）${def.description ? `\n${def.description}` : ''}`;
       tile.addEventListener('click', () => {
+        if (locked) return void this.ctx.ui.toast(`尚未擁有「${def.name}」，可從抽卡取得`);
         if (on) this.hand = null;
         else if (left > 0) this.hand = { id: def.id, rot: 0 };
         else return void this.ctx.ui.toast(`「${def.name}」已經全部擺出去了`);
         this.refresh();
       });
       this.palette.append(tile);
+      if (def.id === focusedId) tile.focus({ preventScroll: true });
     }
     if (!any) this.palette.append(el('div', 'ugc-decor-empty', '還沒有裝飾物，去抽卡取得'));
+    this.palette.scrollLeft = scrollLeft;
   }
 
   private setGhost(hand: Hand | null): void {

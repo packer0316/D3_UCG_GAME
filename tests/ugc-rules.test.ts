@@ -172,7 +172,7 @@ describe('抽卡', () => {
   it('卡池：所有魚卡、初始場景以外的場景、所有裝飾物；每個稀有度都有東西', () => {
     expect(GACHA_POOL.filter((i) => i.kind === 'fish').map((i) => i.id)).toEqual([...CARD_FISH_TYPES]);
     expect(GACHA_POOL.some((i) => i.kind === 'scene' && i.id === Forest)).toBe(false);
-    expect(GACHA_POOL.filter((i) => i.kind === 'scene')).toHaveLength(5);
+    expect(GACHA_POOL.filter((i) => i.kind === 'scene')).toHaveLength(9);
     for (const r of ['N', 'R', 'SR', 'SSR'] as Rarity[]) expect(gachaPoolOf(r).length, r).toBeGreaterThan(0);
     expect(Object.values(GACHA_RARITY_WEIGHT).reduce((a, b) => a + b, 0)).toBe(100);
   });

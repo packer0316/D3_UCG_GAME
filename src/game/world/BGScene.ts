@@ -76,6 +76,7 @@ function applyPose(obj: THREE.Object3D, tpl: C3bModelTemplate, pose: FrameRange)
 
 export class BGScene {
   private nodes = new Map<number, SceneNode>();
+  private proceduralLoads = new Map<number, Promise<SceneNode>>();
   private currentType: number = SceneType.NONE;
   /** 進行中的轉場：再次切換時直接結束 */
   private finishTransition: (() => void) | null = null;
@@ -272,16 +273,23 @@ export class BGScene {
   }
 
   /** 程序化場景（SPEC §18）：根節點已經是世界座標（Z 朝上），繪製順序由場景自己決定 */
-  private buildProcedural(def: SceneDefine): SceneNode {
+  private buildProcedural(def: SceneDefine): Promise<SceneNode> {
+    const pending = this.proceduralLoads.get(def.type);
+    if (pending) return pending;
     const build = getProceduralSceneBuilder(def.procedural!);
     if (!build) throw new Error(`[BGScene] 程序化場景 "${def.procedural}" 沒有註冊`);
-    const proc = build({ renderer: this.renderer });
-    proc.root.name = `scene_${def.type}`;
-    proc.root.visible = false;
-    this.layer.add(proc.root);
-    const node: SceneNode = { type: def.type, def, root: proc.root, materials: proc.materials, isSky: false, elapsed: 0, proc };
-    this.nodes.set(def.type, node);
-    return node;
+    // Preload and an early scene switch can ask for the same asynchronous assets.
+    const task = Promise.resolve(build({ renderer: this.renderer })).then(proc => {
+      proc.root.name = `scene_${def.type}`;
+      proc.root.visible = false;
+      this.layer.add(proc.root);
+      const node: SceneNode = { type: def.type, def, root: proc.root, materials: proc.materials, isSky: false, elapsed: 0, proc };
+      this.nodes.set(def.type, node);
+      return node;
+    });
+    this.proceduralLoads.set(def.type, task);
+    void task.then(() => this.proceduralLoads.delete(def.type), () => this.proceduralLoads.delete(def.type));
+    return task;
   }
 
   private setWrap(tex: THREE.Texture, wrap: THREE.Wrapping): void {

@@ -18,7 +18,7 @@ export interface ProceduralScene {
   update?(time: number, dt: number): void;
 }
 
-export type ProceduralSceneBuilder = (ctx: ProceduralSceneContext) => ProceduralScene;
+export type ProceduralSceneBuilder = (ctx: ProceduralSceneContext) => ProceduralScene | Promise<ProceduralScene>;
 
 const builders = new Map<string, ProceduralSceneBuilder>();
 

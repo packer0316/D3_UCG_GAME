@@ -77,7 +77,8 @@ export class CardPanel {
     const decos = el('div', 'ugc-extra-row');
     for (const d of DECO_DEFINES) {
       const n = p.decos[d.id] ?? 0;
-      const icon = createSummonCard({ kind: 'deco', id: d.id, rarity: d.rarity }, { compact: true, note: `持有 ×${n}` });
+      const icon = createSummonCard({ kind: 'deco', id: d.id, rarity: d.rarity }, { compact: true, note: `${d.w*d.d} 格 · ${d.w}×${d.d} · 持有 ×${n}` });
+      icon.title=`${d.name}${d.description ? `\n${d.description}` : ''}\n占地 ${d.w}×${d.d}，可旋轉擺放`;
       icon.classList.toggle('locked', n === 0);
       decos.append(icon);
     }

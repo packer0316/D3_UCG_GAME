@@ -14,6 +14,7 @@ export class DecoLayer {
   private readonly group = new THREE.Group();
   /** 目前顯示的配置（判斷要不要重建） */
   private shown = '';
+  private readonly objects = new Map<string,THREE.Object3D>();
   /** 裝潢模式中：不跟著房間資料更新 */
   private editing = false;
   private sky = false;
@@ -44,18 +45,20 @@ export class DecoLayer {
     if (!editing) this.syncRoom();
   }
 
-  /** 重建成這份配置；內容沒變就不動 */
+  /** 依配置增刪；保留未變動的模型與 GPU buffers，避免每放一件就重建整個家園。 */
   show(items: readonly DecoPlacement[], editing: boolean): void {
     const key = `${editing ? 'E' : 'N'}${JSON.stringify(items)}`;
     if (key === this.shown) return;
     this.shown = key;
-    for (const child of [...this.group.children]) {
-      this.group.remove(child);
-      disposeDecoObject(child);
+    const keyed=items.map(item=>({item,key:`${editing?'E':'N'}:${item.id}:${item.x}:${item.y}:${item.rot}`}));
+    const wanted=new Set(keyed.map(({key})=>key));
+    for(const [key,obj] of this.objects)if(!wanted.has(key)){
+      this.group.remove(obj);disposeDecoObject(obj);this.objects.delete(key);
     }
-    for (const item of items) {
+    for (const {item,key} of keyed) {
+      if(this.objects.has(key))continue;
       const obj = createPlacedDeco(item, { editing });
-      if (obj) this.group.add(obj);
+      if (obj) {this.group.add(obj);this.objects.set(key,obj);}
     }
   }
 }

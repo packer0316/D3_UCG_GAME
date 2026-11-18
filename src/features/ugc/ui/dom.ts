@@ -2,11 +2,12 @@
  * UGC 介面共用的小工具：建立 DOM、數字格式、魚 / 場景 / 裝飾物的圖示。
  */
 import { getFishDefine } from '@game/define/FishDefine';
-import { SCENE_DEFINES, SceneType } from '@game/define/SceneDefine';
+import { SCENE_DEFINES } from '@game/define/SceneDefine';
 import { FISH_RARITY, RARITY_NAME, SCENE_RARITY, isBossCard } from '@game/ugc/CardDefine';
 import { getDecoDefine, type DecoDefine } from '@game/ugc/DecoDefine';
 import type { Rarity } from '@game/ugc/UgcTypes';
 import type { UIRoot } from '@ui/UIRoot';
+import { cardArtwork } from './GachaArtwork';
 
 type Child = Node | string | null | undefined | false;
 
@@ -55,39 +56,30 @@ export function fishIcon(ui: UIRoot, fishType: number, size: number): HTMLDivEle
   return box;
 }
 
-/** 場景的代表色（沒有縮圖，用漸層色塊代替） */
-const SCENE_COLORS: Record<number, [string, string]> = {
-  [SceneType.Forest]: ['#5fae4e', '#1f5a2a'],
-  [SceneType.Desert]: ['#e0b56a', '#8a5a1e'],
-  [SceneType.Snow]: ['#9fd4f5', '#3a6fb0'],
-  [SceneType.Boss_Sky_Dusk]: ['#f5a45a', '#7a3a8c'],
-  [SceneType.ZB_Prison]: ['#7f8ea3', '#2c3644'],
-  [SceneType.ZB_Cemetery]: ['#8a6bc0', '#2a1f48'],
-};
+/** Same source art as the summon / collection cards, including atlas crop coordinates. */
+function thumbnail(kind: 'scene'|'deco', id: string|number): HTMLDivElement {
+  const art=cardArtwork({kind,id});
+  const frame=el('div','ugc-art-thumbnail'),img=el('img');
+  img.src=`${import.meta.env.BASE_URL}res/gacha/${art.file}`;
+  img.alt='';img.decoding='async';img.draggable=false;
+  Object.assign(img.style,{width:`${art.columns*100}%`,height:`${art.rows*100}%`,left:`${-(art.index%art.columns)*100}%`,top:`${-Math.floor(art.index/art.columns)*100}%`});
+  frame.append(img);return frame;
+}
 
 /** 場景色塊（寬高由 CSS 的 .ugc-scene 決定，或另外指定 class） */
 export function sceneChip(sceneType: number, className = ''): HTMLDivElement {
-  const [a, b] = SCENE_COLORS[sceneType] ?? ['#888', '#444'];
-  const chip = el('div', `ugc-scene ${className}`.trim(), el('span', '', sceneName(sceneType)));
-  chip.style.background = `linear-gradient(160deg, ${a}, ${b})`;
+  const chip = el('div', `ugc-scene ${className}`.trim(), thumbnail('scene',sceneType), el('span', 'ugc-scene-caption', sceneName(sceneType)));
   const rarity = SCENE_RARITY[sceneType];
   if (rarity) chip.dataset.rarity = rarity;
   return chip;
 }
 
-const hex = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;
-
-/** 裝飾物圖示：佔位方塊的顏色 + 佔地格數 */
+/** 裝潢卡圖與實際占地標記。 */
 export function decoIcon(def: DecoDefine, size: number): HTMLDivElement {
   const box = el('div', `ugc-deco-icon r-${def.rarity}`);
-  box.style.width = box.style.height = `${size}px`;
-  const max = Math.max(def.w, def.d);
-  const cube = el('div', 'ugc-deco-cube');
-  cube.style.width = `${(def.w / max) * 70}%`;
-  cube.style.height = `${(def.d / max) * 70}%`;
-  cube.style.background = hex(def.color);
-  box.append(cube, el('span', 'ugc-deco-size', `${def.w}×${def.d}`));
-  box.title = def.name;
+  box.style.width = `${size}px`;box.style.height = `${size*1.5}px`;
+  box.append(thumbnail('deco',def.id), el('span', 'ugc-deco-size', `${def.w*def.d} 格 · ${def.w}×${def.d}`));
+  box.title = `${def.name}｜${def.w}×${def.d} 格${def.description ? `\n${def.description}` : ''}`;
   return box;
 }
 

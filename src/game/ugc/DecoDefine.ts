@@ -18,11 +18,12 @@ export interface DecoDefine {
   /** 佔位方塊的顏色（0xRRGGBB） */
   color: number;
   rarity: Rarity;
-  /** 正式模型路徑（之後補；沒有就畫方塊） */
+  /** 模型識別碼；artisan 使用專屬程序化模型。 */
   model?: string;
+  description?: string;
 }
 
-/** 這一版先用佔位方塊 */
+/** 舊物品保留原 ID，既有家園配置與持有數不會失效。 */
 export const DECO_DEFINES: readonly DecoDefine[] = [
   { id: 'cube_white', name: '小方塊（白）', w: 1, d: 1, h: 1, color: 0xe8edf2, rarity: 'N' },
   { id: 'cube_red', name: '小方塊（紅）', w: 1, d: 1, h: 1, color: 0xd9534f, rarity: 'N' },
@@ -31,7 +32,22 @@ export const DECO_DEFINES: readonly DecoDefine[] = [
   { id: 'block_green', name: '大方塊（綠）', w: 2, d: 2, h: 2, color: 0x4caf6a, rarity: 'R' },
   { id: 'tower_purple', name: '高方塊（紫）', w: 1, d: 1, h: 3, color: 0x8e5bd6, rarity: 'SR' },
   { id: 'plate_gold', name: '金色平台', w: 3, d: 3, h: 0.5, color: 0xf2c84b, rarity: 'SSR' },
+  // 花園珍藏：6 件一格、3 件兩格、2 件三格、1 件四格。
+  { id: 'pumpkin_lantern', name: '南瓜燈籠怪', w: 1, d: 1, h: 1.15, color: 0xe98827, rarity: 'R', model: 'artisan', description: '藤蔓小怪守著一盞搖曳的萬聖節燈火。' },
+  { id: 'victorian_lamp', name: '維多利亞路燈', w: 1, d: 1, h: 2.6, color: 0xe4b965, rarity: 'R', model: 'artisan', description: '鍛鐵花飾、黃銅雕邊與溫暖的六角燈室。' },
+  { id: 'taiwan_flag', name: '台灣國旗', w: 1, d: 1, h: 2.6, color: 0xde4248, rarity: 'N', model: 'artisan', description: '金屬旗桿上，青天白日滿地紅隨風飄揚。' },
+  { id: 'snowman', name: '暖心雪人', w: 1, d: 1, h: 1.6, color: 0xdcefff, rarity: 'N', model: 'artisan', description: '雪晶閃耀，紅圍巾與高帽陪你度過冬夜。' },
+  { id: 'mushroom_lantern', name: '微光蘑菇屋', w: 1, d: 1, h: 1.15, color: 0xef725c, rarity: 'R', model: 'artisan', description: '苔蘚間的小小窗戶，透出森林精靈的燈光。' },
+  { id: 'lotus_bowl', name: '青瓷蓮花缽', w: 1, d: 1, h: .7, color: 0x85c9b1, rarity: 'N', model: 'artisan', description: '冰裂青瓷與金邊，托住一朵盛放的粉蓮。' },
+  { id: 'rose_bench', name: '薔薇鍛鐵長椅', w: 2, d: 1, h: 1.2, color: 0xba8260, rarity: 'R', model: 'artisan', description: '油亮木條、卷草扶手與兩簇深紅薔薇。' },
+  { id: 'wishing_well', name: '星願古井', w: 2, d: 1, h: 1.9, color: 0xb5b5a0, rarity: 'SR', model: 'artisan', description: '石砌井壁、紅瓦屋頂與懸在波光上的銅桶。' },
+  { id: 'celestial_orrery', name: '黃銅星象儀', w: 2, d: 1, h: 1.8, color: 0xd9b55b, rarity: 'SR', model: 'artisan', description: '三重星環緩緩轉動，藍寶石映出宇宙微光。' },
+  { id: 'banyan_tree', name: '千絲榕樹', w: 3, d: 1, h: 2.7, color: 0x64a66a, rarity: 'SR', model: 'artisan', description: '盤根、垂落氣根與濃密翠葉，留下一片樹蔭。' },
+  { id: 'rose_pergola', name: '月白薔薇花架', w: 3, d: 1, h: 2.25, color: 0xd9c7b4, rarity: 'SR', model: 'artisan', description: '白石雕柱與金色花格，覆滿深紅薔薇。' },
+  { id: 'celestial_fountain', name: '星輝水晶噴泉', w: 2, d: 2, h: 1.9, color: 0x75cdd5, rarity: 'SSR', model: 'artisan', description: '雙層雕花白石池與水晶寶珠，六道泉水灑落星光。' },
 ];
+
+export const GARDEN_DECO_DEFINES = DECO_DEFINES.filter(d => d.model === 'artisan');
 
 const BY_ID = new Map(DECO_DEFINES.map((d) => [d.id, d]));
 

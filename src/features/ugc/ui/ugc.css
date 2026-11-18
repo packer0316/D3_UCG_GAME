@@ -394,7 +394,19 @@
   top: 1px;
   font: 700 9px/11px Consolas, monospace;
   color: #dbe9ff;
+  padding: 2px 3px;
+  background: rgba(8, 14, 23, .8);
+  border-radius: 3px;
+  text-shadow: 0 1px 2px #000;
 }
+.ugc-art-thumbnail { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.ugc-art-thumbnail img { position: absolute; max-width: none; }
+.ugc-scene { overflow: hidden; background: #15202b; }
+.ugc-scene .ugc-art-thumbnail { opacity: .62; }
+.ugc-scene-caption { position: relative; z-index: 1; }
+.ugc-scene.big { height: 106px; align-items: flex-end; padding-bottom: 7px; }
+.ugc-scene.big .ugc-art-thumbnail { opacity: 1; }
+.ugc-scene.big::after { content: ''; position: absolute; inset: 45% 0 0; background: linear-gradient(transparent, #080e19eb); }
 .ugc-deco-count {
   position: absolute;
   right: 0;
@@ -1116,20 +1128,73 @@
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
+  width: 960px;
   max-width: calc(100% - 24px);
   padding: 8px;
   border-radius: 10px;
   border: 2px solid #5f86c4;
   background: rgba(15, 29, 54, 0.88);
-  overflow-x: auto;
+  overflow: hidden;
+}
+.ugc-decor-catalog-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.ugc-decor-filter,
+.ugc-decor-scroll {
+  flex: none;
+  padding: 5px 10px;
+  border: 1px solid var(--ugc-line);
+  border-radius: 6px;
+  background: rgba(8, 18, 38, 0.6);
+  color: var(--ugc-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ugc-decor-filter[aria-pressed="true"] {
+  border-color: var(--ugc-gold);
+  color: var(--ugc-gold);
+  background: rgba(122, 93, 36, 0.25);
+}
+.ugc-decor-catalog-hint {
+  flex: 1;
+  min-width: 0;
+  color: var(--ugc-muted);
+  font-size: 11px;
+}
+.ugc-decor-scroll {
+  padding: 2px 10px;
+  color: var(--ugc-text);
+  font-size: 20px;
+  line-height: 1;
 }
 .ugc-decor-palette {
   display: flex;
   gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 5px;
+  overscroll-behavior-x: contain;
+  scrollbar-color: #5f86c4 rgba(8, 18, 38, 0.6);
+  scrollbar-width: thin;
 }
 .ugc-decor-item {
   flex: none;
-  width: 92px;
+  width: 100px;
+}
+.ugc-decor-item.unowned {
+  border-style: dashed;
+}
+.ugc-decor-item.unowned .ugc-card-lv {
+  color: #cfb995;
+}
+.ugc-decor-filter:focus-visible,
+.ugc-decor-scroll:focus-visible,
+.ugc-decor-item:focus-visible {
+  outline: 2px solid var(--ugc-gold);
+  outline-offset: -2px;
 }
 .ugc-decor-empty {
   padding: 10px 20px;

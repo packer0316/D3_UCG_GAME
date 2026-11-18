@@ -19,6 +19,10 @@ export const SceneType = {
   Boss_Sky_Dusk: 15,
   /** 月球表面（程序化場景，SPEC §18；原版沒有，編號接在原版之後） */
   Space_Moon: 20,
+  /** FisherFPS 古堡美術延伸，沿用監獄 / 墓地相機。 */
+  Rose_Castle: 21,
+  Tide_Palace: 22,
+  Maple_Shrine: 23,
 } as const;
 
 /** 原版 SceneState */
@@ -273,6 +277,14 @@ SCENE_DEFINES[SceneType.Space_Moon] = {
   camera: CameraPresetId.Zombie,
 };
 
+for (const [type, name, procedural, shadowColor] of [
+  [SceneType.Rose_Castle, '永夜薔薇城堡', 'rose-castle', [0.10, 0.10, 0.16]],
+  [SceneType.Tide_Palace, '碧潮水晶殿', 'tide-palace', [0.06, 0.19, 0.23]],
+  [SceneType.Maple_Shrine, '赤楓燈籠神社', 'maple-shrine', [0.19, 0.16, 0.18]],
+] as const) {
+  SCENE_DEFINES[type] = { type, name, procedural, state: SceneState.Ground, shadowColor: [...shadowColor], bgm: 'bgm/BGM_Normal', camera: CameraPresetId.Zombie };
+}
+
 /** 地面場景（state = Ground） */
 export const GROUND_SCENES: readonly number[] = Object.values(SCENE_DEFINES)
   .filter((d) => d.state === SceneState.Ground)
@@ -290,6 +302,9 @@ export const SCENE_LIST: readonly number[] = [
   SceneType.ZB_Prison,
   SceneType.ZB_Cemetery,
   SceneType.Space_Moon,
+  SceneType.Rose_Castle,
+  SceneType.Tide_Palace,
+  SceneType.Maple_Shrine,
 ];
 
 export function isSkyScene(sceneType: number): boolean {

@@ -3,11 +3,12 @@ import type { GameContext } from '@game/GameContext';
 import { RARITIES, RARITY_NAME } from '@game/ugc/CardDefine';
 import { GACHA_COST, GACHA_POOL, GACHA_RARITY_WEIGHT, GACHA_TEN_GUARANTEE, gachaPoolOf, type GachaItem } from '@game/ugc/GachaDefine';
 import type { GachaResult } from '@game/ugc/UgcTypes';
+import { getDecoDefine } from '@game/ugc/DecoDefine';
 import type { UgcClient } from '../UgcClient';
 import { SummonEffects } from '../fx/SummonEffects';
 import { Panel } from './Panel';
 import { el, fmt } from './dom';
-import { CARD_FINISH, cardFinish, cardKind, cardName, createSummonCard, resultNote, revealCard } from './SummonCard';
+import { CARD_FINISH, cardArt, cardFinish, cardKind, cardName, createSummonCard, resultNote, revealCard } from './SummonCard';
 import './summon-squeeze.css';
 
 /** charging = 發牌中、ready = 牌發好了等玩家按、revealing = 翻牌中 */
@@ -170,6 +171,7 @@ export class GachaPanel {
         this.ctx.ui.toast(ack.reason ?? '召喚失敗'); return;
       }
       this.results = ack.results;
+      await this.prepareArtwork(ack.results);
       if (!this.panel.isOpen) { this.phase = 'complete'; return; }
       this.beginReveal();
     } catch {
@@ -178,6 +180,18 @@ export class GachaPanel {
       this.status.textContent = '連線中斷，請稍後確認收藏與券數';
       this.ctx.ui.toast('連線中斷，請稍後確認收藏與券數');
     } finally { this.refresh(); }
+  }
+
+  /** Decode large standalone illustrations before dealing; the server receipt is already committed. */
+  private async prepareArtwork(results: readonly GachaResult[]): Promise<void> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const images=[...new Set(results.map(cardArt))].map(src=>{
+      const image=new Image();image.src=src;
+      return image.decode().catch(()=>undefined); // The card's existing error fallback handles unavailable files.
+    });
+    try {
+      await Promise.race([Promise.all(images),new Promise<void>(resolve=>{timeout=setTimeout(resolve,8000);})]);
+    } finally {if(timeout!==undefined)clearTimeout(timeout);}
   }
 
   private renderResults(): void {
@@ -389,9 +403,11 @@ export class GachaPanel {
     const back = el('button', 'summon-text-button', fromPool ? '← 返回卡池' : '← 返回召喚');
     back.addEventListener('click', () => fromPool ? this.showPool() : this.closeOverlay());
     const description = item.kind === 'fish' ? '將龍魂放入家園，喚醒牠的力量。重複取得的龍魂會化為升級所需的碎片。' : item.kind === 'scene' ? '在家園中設定這片領域。重複的領域卡會自動轉換為金幣。' : '將這件造物擺放在家園中。每次召喚都會增加一件可用的裝飾物。';
+    const deco=item.kind==='deco' ? getDecoDefine(String(item.id)) : undefined;
     this.showOverlay('卡片鑑賞', el('div', 'summon-inspect', createSummonCard(item),
       el('div', 'summon-inspect-copy', el('div', 'summon-eyebrow', `${item.rarity} / ${cardKind(item)} / ${CARD_FINISH[cardFinish(item)].label}`),
-        el('h2', '', cardName(item)), el('p', '', description), note && el('p', 'summon-inspect-note', note),
+        el('h2', '', cardName(item)), deco?.description && el('p','',deco.description), el('p', '', description),
+        deco && el('p','summon-inspect-note',`家園占地 ${deco.w*deco.d} 格 · ${deco.w}×${deco.d} · 可旋轉擺放`), note && el('p', 'summon-inspect-note', note),
         cardFinish(item) === 'red' && el('p', 'summon-inspect-note', '特別緋紅卡面 · SSR 傳說'), back)));
   }
 

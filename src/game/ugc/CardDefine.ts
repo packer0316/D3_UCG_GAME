@@ -87,4 +87,8 @@ export const SCENE_RARITY: Readonly<Record<number, Rarity>> = {
   [SceneType.Boss_Sky_Dusk]: 'SR',
   [SceneType.ZB_Prison]: 'SR',
   [SceneType.ZB_Cemetery]: 'SR',
+  [SceneType.Space_Moon]: 'SR',
+  [SceneType.Rose_Castle]: 'SSR',
+  [SceneType.Tide_Palace]: 'SSR',
+  [SceneType.Maple_Shrine]: 'SR',
 };

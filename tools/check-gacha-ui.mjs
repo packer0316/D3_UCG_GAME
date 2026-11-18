@@ -12,7 +12,8 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-  await page.goto(baseUrl);
+  const testUrl=new URL(baseUrl);testUrl.searchParams.set('debug','');
+  await page.goto(testUrl.href);
   await page.waitForFunction(() => window.__ugc?.client.profile, null, { timeout: 60000 });
   await page.locator('#loading').waitFor({ state: 'detached', timeout: 60000 });
   await page.keyboard.press('Backquote');
@@ -45,16 +46,16 @@ try {
   await page.keyboard.press('Escape');
   check('second Escape closes panel and stops GPU', await page.evaluate(() => !window.__ugc.panels.gacha.panel.isOpen && !window.__ugc.panels.gacha.effects.running));
   await page.evaluate(() => window.__ugc.panels.gacha.panel.open());
-  check('reopening preserves the last receipt', await page.locator('.summon-result-grid .is-revealed').count() === 10);
+  check('reopening after viewed results returns to welcome', await page.locator('.summon-fan .summon-card').count() === 5);
   await page.getByRole('button', { name: '卡池一覽 / 機率', exact: true }).click();
-  check('pool shows all 35 rewards', await page.locator('.summon-pool-grid .summon-card').count() === 35);
+  check('pool shows all 51 rewards', await page.locator('.summon-pool-grid .summon-card').count() === 51);
   await page.waitForFunction(() => [...document.querySelectorAll('.summon-pool-grid img')].every(i => i.complete && i.naturalWidth > 0));
   await page.screenshot({ path: `${output}/pool.png` });
-  await page.getByRole('button', { name: '領域 5', exact: true }).click();
-  check('scene filter contains all five scene cards', await page.locator('.summon-pool-grid .summon-card').count() === 5);
+  await page.getByRole('button', { name: '領域 9', exact: true }).click();
+  check('scene filter contains all nine scene cards', await page.locator('.summon-pool-grid .summon-card').count() === 9);
   await page.screenshot({ path: `${output}/scenes.png` });
-  await page.getByRole('button', { name: '造物 7', exact: true }).click();
-  check('decoration filter contains all seven illustrated cards', await page.locator('.summon-pool-grid .summon-card').count() === 7);
+  await page.getByRole('button', { name: '造物 19', exact: true }).click();
+  check('decoration filter contains all nineteen illustrated cards', await page.locator('.summon-pool-grid .summon-card').count() === 19);
   await page.screenshot({ path: `${output}/decorations.png` });
   await page.keyboard.press('Escape');
   // Controlled receipt exercises every finish, including both SSR finishes, without changing production probabilities.
@@ -68,9 +69,9 @@ try {
       { kind:'fish', id:25, rarity:'SSR', isNew:true },
       { kind:'fish', id:27, rarity:'SSR', isNew:true },
       { kind:'scene', id:1, rarity:'R', isNew:false, gold:100000 },
-      { kind:'scene', id:15, rarity:'SR', isNew:true },
-      { kind:'deco', id:'plate_gold', rarity:'SSR', isNew:true, count:1 },
-      { kind:'deco', id:'cube_red', rarity:'N', isNew:false, count:3 },
+      { kind:'scene', id:23, rarity:'SR', isNew:true },
+      { kind:'deco', id:'celestial_fountain', rarity:'SSR', isNew:true, count:1 },
+      { kind:'deco', id:'lotus_bowl', rarity:'N', isNew:false, count:3 },
       { kind:'fish', id:24, rarity:'SSR', isNew:true },
     ];
     client.draw = async times => ({ ok: true, results: times === 1 ? [window.testResults[4]] : window.testResults });
@@ -81,9 +82,9 @@ try {
   await page.waitForTimeout(1500);
   check('dealt cards wait for the player', await page.evaluate(() => window.__ugc.panels.gacha.phase === 'ready') && await page.locator('.summon-result-grid .is-revealed').count() === 0 && await page.locator('.summon-tap-hint').isVisible());
   await page.locator('.summon-tap-hint').click();
-  await page.locator('.summon-spotlight').waitFor({ state: 'visible', timeout: 12000 });
+  await page.locator('.summon-result-grid .is-squeezing').first().waitFor({ state: 'visible', timeout: 12000 });
   await page.waitForTimeout(350);
-  check('SSR receives a dedicated central spotlight', await page.locator('.summon-spotlight .summon-card').count() === 1);
+  check('high-rarity cards receive staged squeeze and focus', await page.locator('.summon-result-grid.is-focusing .is-squeezing').count() === 1);
   await page.screenshot({ path: `${output}/revealing.png` });
   // 紫卡以上逐張瞇牌：這組固定結果有 4 張 SSR + 2 張 SR，整輪約 30 秒
   await page.waitForFunction(() => window.__ugc.panels.gacha.phase === 'complete', null, { timeout: 45000 });
@@ -111,7 +112,7 @@ try {
   check('failure keeps previous result and unlocks buttons', await page.locator('.summon-result-grid .is-revealed').count() === 10 && await page.locator('.summon-draw:disabled').count() === 0);
   await page.locator('.ui-toast').last().waitFor({ state: 'detached', timeout: 6000 });
   await page.evaluate(() => { window.__ugc.client.draw = window.testOriginalDraw; window.__ugc.panels.gacha.panel.close(); window.__ugc.panels.cards.panel.open(); });
-  check('collection has all 36 full-art cards plus selected preview', await page.locator('.collection-panel .summon-card').count() === 37);
+  check('collection has all 52 full-art cards plus selected preview', await page.locator('.collection-panel .summon-card').count() === 53);
   await page.screenshot({ path: `${output}/collection.png` });
   await page.evaluate(() => { window.__ugc.panels.cards.panel.close(); window.__ugc.panels.gacha.panel.open(); });
   // Portrait screen: three columns, scrolling all results, controls remain accessible.
@@ -137,7 +138,7 @@ try {
   await fallback.evaluate(() => window.__ugc.panels.gacha.panel.open());
   check('unavailable effect WebGL retains functional cards', await fallback.evaluate(() => window.__ugc.panels.gacha.effects.canvas.hidden && document.querySelectorAll('.summon-fan .summon-card').length === 5));
   await fallback.getByRole('button', { name:'卡池一覽 / 機率', exact:true }).click();
-  check('effect fallback retains the full interactive pool', await fallback.locator('.summon-pool-grid .summon-card').count() === 35);
+  check('effect fallback retains the full interactive pool', await fallback.locator('.summon-pool-grid .summon-card').count() === 51);
   await fallback.close();
   check('no runtime or shader errors', errors.length === 0);
   console.log(JSON.stringify({ checks, errors, screenshots: output }, null, 2));

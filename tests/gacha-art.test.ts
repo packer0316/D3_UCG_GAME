@@ -31,7 +31,7 @@ describe('shipped gacha card artwork', () => {
       expect(slots.has(slot), `duplicate art for ${card.kind}:${card.id}`).toBe(false);
       slots.add(slot);
     }
-    expect(slots.size).toBe(36);
+    expect(slots.size).toBe(52);
   });
 
   it('ships decodable atlases with unstretched 2:3 card cells', () => {
