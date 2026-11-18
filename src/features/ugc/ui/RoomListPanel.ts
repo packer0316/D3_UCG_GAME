@@ -2,7 +2,8 @@
  * 房間列表（SPEC-UGC §2.1）：左邊房間清單，右邊選到的房間的內容（輪替表、每種龍的等級與倍率），按「進入」換房。
  */
 import type { GameContext } from '@game/GameContext';
-import { commissionRate, levelMultiplier } from '@game/ugc/CultivateRule';
+import { commissionRate, fishMultiplier, hasFixedOdds } from '@game/ugc/CultivateRule';
+import { MAX_LEVEL } from '@game/ugc/UgcDefine';
 import type { RoomDetail } from '@game/ugc/UgcTypes';
 import type { UgcClient } from '../UgcClient';
 import { Panel } from './Panel';
@@ -85,7 +86,7 @@ export class RoomListPanel {
         ? '公有地：所有的龍、所有的場景都會出現。在這裡打龍會掉抽卡券。'
         : room.isMine
           ? '我的家園：在這裡打龍不會掉抽卡券。訪客來打龍，我可以拿到抽成。'
-          : `${room.ownerName}的家園：打龍會掉抽卡券（等級越高越容易掉），開砲成本的 ${fmtPct(commissionRate(1))} 起會抽成給屋主。`;
+          : `${room.ownerName}的家園：打龍會掉抽卡券（等級越高越容易掉），開砲成本的 ${fmtPct(commissionRate(1), 0)} ~ ${fmtPct(commissionRate(MAX_LEVEL), 0)}（依龍的等級）會抽成給屋主。`;
     this.detail.append(
       el('div', 'ugc-detail-head', el('div', 'ugc-detail-title', room.name), enter),
       el('div', 'ugc-detail-desc', desc),
@@ -104,7 +105,7 @@ export class RoomListPanel {
         const icon = fishIcon(this.ctx.ui, t, 44);
         if (room.kind === 'home') {
           icon.append(el('span', 'ugc-icon-lv', `Lv.${lv}`));
-          icon.title += `　Lv.${lv}　倍率 ${fmtMult(levelMultiplier(lv))}`;
+          icon.title += `　Lv.${lv}　倍率 ${hasFixedOdds(t) ? '×1（固定）' : fmtMult(fishMultiplier(t, lv), 3)}　抽成 ${fmtPct(commissionRate(lv), 2)}`;
         }
         fish.append(icon);
       }

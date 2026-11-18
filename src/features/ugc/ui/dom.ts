@@ -26,9 +26,12 @@ export function clear(node: HTMLElement): void {
 /** 千分位整數 */
 export const fmt = (n: number): string => Math.floor(n).toLocaleString('en-US');
 
-/** 倍率 / 百分比顯示 */
-export const fmtMult = (m: number): string => `×${m.toFixed(1)}`;
-export const fmtPct = (r: number): string => `${Math.round(r * 1000) / 10}%`;
+/** 倍率 / 百分比顯示（digits = 小數位數） */
+export const fmtMult = (m: number, digits = 1): string => `×${m.toFixed(digits)}`;
+export const fmtPct = (r: number, digits = 1): string => `${(r * 100).toFixed(digits)}%`;
+/** 賠率：100 倍以上取整數加千分位，以下留一位小數（去掉 .0） */
+export const fmtOdds = (odds: number): string =>
+  odds >= 100 ? Math.round(odds).toLocaleString('en-US') : String(Math.round(odds * 10) / 10);
 
 export const fishName = (fishType: number): string => getFishDefine(fishType)?.name ?? `#${fishType}`;
 export const sceneName = (sceneType: number): string => SCENE_DEFINES[sceneType]?.name ?? `場景 ${sceneType}`;

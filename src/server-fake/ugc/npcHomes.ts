@@ -39,7 +39,7 @@ const SPECS: NpcSpec[] = [
       { sceneType: Forest, fishTypes: STARTER },
       { sceneType: Desert, fishTypes: STARTER },
     ],
-    level: (t) => 2 + (t % 3),
+    level: (t) => 5 + (t % 3) * 5,
     decoCount: 8,
   },
   {
@@ -49,7 +49,7 @@ const SPECS: NpcSpec[] = [
       { sceneType: Forest, fishTypes: [2] },
       { sceneType: Forest, fishTypes: [1, 2, 3] },
     ],
-    level: 10,
+    level: 100,
     decoCount: 12,
   },
   {
@@ -58,7 +58,7 @@ const SPECS: NpcSpec[] = [
       { sceneType: Desert, fishTypes: [...STARTER, 12, 13, 14] },
       { sceneType: Forest, fishTypes: [4, 5, 8, 9, 10, 11, 12, 13] },
     ],
-    level: (t) => (t >= 12 ? 3 + (t % 3) : 2),
+    level: (t) => (t >= 12 ? 20 + (t % 3) * 10 : 10),
     decoCount: 10,
   },
   {
@@ -67,7 +67,7 @@ const SPECS: NpcSpec[] = [
       { sceneType: Snow, fishTypes: [1, 2, 3, 4, 5, 15, 16, 17, 22] },
       { sceneType: Snow, fishTypes: [8, 9, 10, 11, 12, 22] },
     ],
-    level: (t) => (t >= 15 ? 4 : 3),
+    level: (t) => (t >= 15 ? 40 : 25),
     decoCount: 14,
   },
   {
@@ -76,7 +76,7 @@ const SPECS: NpcSpec[] = [
       { sceneType: Sky, fishTypes: [2, 11, 22, 26, 27] },
       { sceneType: Forest, fishTypes: STARTER },
     ],
-    level: (t) => (t === 26 ? 4 : t === 27 ? 3 : 2),
+    level: (t) => (t === 26 ? 40 : t === 27 ? 30 : 15),
     decoCount: 6,
   },
   {
@@ -85,7 +85,7 @@ const SPECS: NpcSpec[] = [
       { sceneType: Prison, fishTypes: [4, 8, 9, 12, 13, 14, 23, 24, 25] },
       { sceneType: Cemetery, fishTypes: [1, 2, 3, 15, 16, 17, 23, 24, 25] },
     ],
-    level: (t) => (t >= 23 ? 5 : 3),
+    level: (t) => (t >= 23 ? 50 : 30),
     decoCount: 18,
   },
   {
@@ -98,7 +98,7 @@ const SPECS: NpcSpec[] = [
       { sceneType: Prison, fishTypes: [...range(9, 17), 23, 24, 25] },
       { sceneType: Cemetery, fishTypes: [1, 2, 3, 15, 16, 17, 22, 23, 24, 25] },
     ],
-    level: (t) => 6 + (t % 5),
+    level: (t) => 60 + (t % 5) * 10,
     decoCount: 30,
   },
 ];

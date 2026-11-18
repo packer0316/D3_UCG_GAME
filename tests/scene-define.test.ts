@@ -3,14 +3,17 @@ import { CAMERA_PRESETS, CameraPresetId } from '../src/game/define/CameraDefine'
 import { FIXED_3D_CAMERA } from '../src/game/define/DisplayDefine';
 import { FishType } from '../src/game/define/FishDefine';
 import {
+  FISH_SCENE_LIMIT,
   GROUND_SCENES,
   SCENE_DEFINES,
   SCENE_LIST,
+  SKY_FISH_TYPES,
   SceneType,
   evalMoonSwitch,
   isFishAllowedInScene,
   sceneLimitLabel,
 } from '../src/game/define/SceneDefine';
+import { createInitialProfile, sanitizeProfile } from '../src/server-fake/ugc/ProfileStore';
 
 describe('場景表（SPEC §15 / §16 / §18）', () => {
   it('SCENE_LIST 都有定義，保留舊場景順序並加入三座聖域', () => {
@@ -48,6 +51,37 @@ describe('場景表（SPEC §15 / §16 / §18）', () => {
       expect(sceneLimitLabel([FishType.Quetzalcoatlus], t)).toBe('空中(黃昏)');
     }
     expect(sceneLimitLabel([FishType.TRex], SceneType.Boss_Sky_Dusk)).toBe('地面');
+  });
+
+  it('天空場景只能有 蛋蛋龍 / 翼龍 / 獵龍騎士 / 風神翼龍 / 翔空蒼龍（含翅膀），其他龍只在地面', () => {
+    const sky = Object.values(FishType).filter((t) => isFishAllowedInScene(t, SceneType.Boss_Sky_Dusk));
+    expect(sky.sort((a, b) => a - b)).toEqual([2, 11, 22, 26, 27, 28]);
+    expect(SKY_FISH_TYPES).toEqual(expect.arrayContaining(sky));
+    for (const t of [FishType.Cub, FishType.Egg_M, FishType.Stegosaurus_G, FishType.Spinosaurus, FishType.Pyroraptor]) {
+      expect(isFishAllowedInScene(t, SceneType.Boss_Sky_Dusk)).toBe(false);
+      expect(sceneLimitLabel([t], SceneType.Boss_Sky_Dusk)).toBe('地面');
+      expect(FISH_SCENE_LIMIT[t]).toEqual(GROUND_SCENES);
+    }
+    // 蛋蛋龍、翼龍、獵龍騎士 地面也可以 → 不限場景
+    for (const t of [FishType.Egg_S, FishType.Pterosau, FishType.DragonSlainKnight]) {
+      expect(FISH_SCENE_LIMIT[t]).toBeUndefined();
+      for (const s of GROUND_SCENES) expect(isFishAllowedInScene(t, s)).toBe(true);
+    }
+    expect(FISH_SCENE_LIMIT[FishType.AzureDragon]).toEqual([SceneType.Boss_Sky_Dusk]);
+  });
+
+  it('舊存檔天空格放了不能放的龍：只拿掉那些龍，其他格保留；整格空掉就移除', () => {
+    const raw = JSON.parse(JSON.stringify(createInitialProfile(0)));
+    raw.scenes.push(SceneType.Boss_Sky_Dusk);
+    raw.home.slots = [
+      { sceneType: SceneType.Forest, fishTypes: [1, 2, 3] },
+      { sceneType: SceneType.Boss_Sky_Dusk, fishTypes: [1, 2, 11] },
+      { sceneType: SceneType.Boss_Sky_Dusk, fishTypes: [4, 5] },
+    ];
+    expect(sanitizeProfile(raw, 0)!.home.slots).toEqual([
+      { sceneType: SceneType.Forest, fishTypes: [1, 2, 3] },
+      { sceneType: SceneType.Boss_Sky_Dusk, fishTypes: [2, 11] },
+    ]);
   });
 });
 

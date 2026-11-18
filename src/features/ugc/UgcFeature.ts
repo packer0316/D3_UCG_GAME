@@ -24,6 +24,11 @@ import './ui/ugc.css';
 
 export class UgcFeature implements GameFeature<GameContext> {
   readonly id = 'ugc';
+  private ticketFx: TicketDropFx | null = null;
+
+  update(dt: number): void {
+    this.ticketFx?.update(dt);
+  }
 
   install(ctx: GameContext): void {
     const ugc = new UgcClient(ctx);
@@ -46,7 +51,12 @@ export class UgcFeature implements GameFeature<GameContext> {
       gacha: () => gacha.panel.toggle(),
       home: () => home.panel.toggle(),
     });
-    new TicketDropFx(ctx, bar.gachaButton);
+    for (const [name, view] of Object.entries({ rooms, cards, gacha, home })) {
+      const { onOpen, onClose } = view.panel;
+      view.panel.onOpen = () => { onOpen?.(); bar.setActive(name as 'rooms' | 'cards' | 'gacha' | 'home'); };
+      view.panel.onClose = () => { onClose?.(); bar.setActive(null); };
+    }
+    const ticketFx = (this.ticketFx = new TicketDropFx(ctx, bar.gachaButton));
 
     // 換房：關掉開著的面板，提示進了哪一間
     let lastRoom = 0;
@@ -64,6 +74,6 @@ export class UgcFeature implements GameFeature<GameContext> {
     });
 
     // console / 自動化測試用
-    (window as unknown as { __ugc: unknown }).__ugc = { client: ugc, decor, panels: { rooms, cards, gacha, home } };
+    (window as unknown as { __ugc: unknown }).__ugc = { client: ugc, decor, ticketFx, panels: { rooms, cards, gacha, home } };
   }
 }

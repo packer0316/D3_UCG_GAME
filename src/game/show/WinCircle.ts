@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { Act } from '@core/tween/Action';
 import { formatCurrency } from '@core/math/cocos';
 import type { CsdInstance, CsdLibrary } from '@engine/csd/CsdPlayer';
+import type { SpriteFrameRef } from '@engine/sprite2d/Sprite2D';
 import type { MegaPrize, WinCircleTypeId } from '../define/FishDefine';
 import { MEGA_PRIZE_IMAGE, WIN_CIRCLE_CSB, WIN_CIRCLE_OTHER, WIN_CIRCLE_RENDER_ORDER } from '../define/RewardDefine';
 import type { OverlayDeps } from './OverlayDeps';
@@ -25,6 +26,10 @@ export interface WinCircleParams {
   fishImage: string;
   mega?: MegaPrize;
   isSelf: boolean;
+  /** 直接指定中間的圖（優先於 fishImage；例：UGC 掉券的券圖） */
+  image?: SpriteFrameRef;
+  /** 數字欄的文字（預設 = money 千分位；例：「x1」） */
+  label?: string;
 }
 
 export class WinCircle {
@@ -63,7 +68,7 @@ export class WinCircle {
       }
     }
     // SetCircleImg
-    const img = assets.findFrame(params.fishImage);
+    const img = params.image ?? assets.findFrame(params.fishImage);
     if (img) inst.find('img')?.setFrame(img);
     else console.warn(`[WinCircle] sprite frame not found: ${params.fishImage}`);
     // PlayExplosionNode
@@ -73,7 +78,7 @@ export class WinCircle {
       explosion.sub.play(undefined, false, () => (explosion.visible = false));
     }
     // start01
-    (inst.find('num') ?? inst.find('Num'))?.setText(formatCurrency(params.money));
+    (inst.find('num') ?? inst.find('Num'))?.setText(params.label ?? formatCurrency(params.money));
     inst.play('start', false);
   }
 

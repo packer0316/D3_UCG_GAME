@@ -9,6 +9,7 @@ import '@game/ugc/UgcProtocol';
 import type { SeatData } from '@net/protocol';
 import { SCENE_DEFINES, SceneType, isSkyScene } from '@game/define/SceneDefine';
 import { cardOf, expandCards } from '@game/ugc/CardDefine';
+import { fishMultiplier } from '@game/ugc/CultivateRule';
 import { PUBLIC_ROOM_ID } from '@game/ugc/UgcDefine';
 import type { RoomDetail, RoomState } from '@game/ugc/UgcTypes';
 import type { FakeServer, FakeServerModule } from '../FakeServer';
@@ -191,6 +192,11 @@ export class RoomModule implements FakeServerModule {
   /** 這種魚在這間房的等級（公有地一律 1；蒼龍翅膀跟著蒼龍） */
   fishLevel(fishType: number): number {
     return this.isHome ? (this.current.levels[cardOf(fishType)] ?? 1) : 1;
+  }
+
+  /** 這種魚在這間房的賠率倍率（公有地 = 原倍率 ×1；家園看魚卡等級，SPEC-UGC §7） */
+  fishMultiplier(fishType: number): number {
+    return this.isHome ? fishMultiplier(fishType, this.fishLevel(fishType)) : 1;
   }
 
   // ------------------------------------------------------------------

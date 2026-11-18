@@ -104,7 +104,12 @@ export class Fish {
   attachedTo: Fish | null = null;
   /** 不跟腳本路徑移動（原版 InitPathMoveBehaviour 回傳 nil） */
   protected followPath = true;
+  /** sprite 的原位 / 原尺寸：受擊晃動、雷擊脈動被打斷時一律回到這裡（不可用「當下值」當基準，會越打越偏） */
   readonly spriteHome = new THREE.Vector3();
+  readonly spriteHomeScale = new THREE.Vector3(1, 1, 1);
+  /** 這隻魚自己建立的外掛材質（模板共用的材質不屬於魚，不可釋放） */
+  private readonly pluginMaterials: THREE.Material[] = [];
+  private destroyed = false;
 
   constructor(init: FishInit) {
     const { info, define, template } = init;
@@ -128,6 +133,7 @@ export class Fish {
     const off = m.spriteOffset ?? { x: 0, y: 0, z: 0 };
     this.sprite.position.set(off.x, off.y, off.z);
     this.spriteHome.copy(this.sprite.position);
+    this.spriteHomeScale.copy(this.sprite.scale);
     this.node.add(this.sprite);
 
     // ---- 材質 + 陰影
@@ -182,7 +188,9 @@ export class Fish {
         const mesh = o as THREE.Mesh;
         if (mesh.isMesh) {
           const src = mesh.material as THREE.MeshBasicMaterial;
-          mesh.material = new THREE.MeshBasicMaterial({ map: src.map, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+          const mat = new THREE.MeshBasicMaterial({ map: src.map, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+          mesh.material = mat;
+          this.pluginMaterials.push(mat);
           mesh.renderOrder = 2;
         }
       });
@@ -420,6 +428,12 @@ export class Fish {
     this.sprite.visible = v;
   }
 
+  /** 受擊晃動 / 雷擊脈動被中途停掉時（stopAllActions），sprite 回到原位與原尺寸 */
+  resetPose(): void {
+    this.sprite.position.copy(this.spriteHome);
+    this.sprite.scale.copy(this.spriteHomeScale);
+  }
+
   // ------------------------------------------------------------------
   // 碰撞 / 位置
   // ------------------------------------------------------------------
@@ -519,17 +533,35 @@ export class Fish {
     return !!this.define.model.isFlying;
   }
 
+  /**
+   * 釋放這隻魚擁有的資源（魚不重用，移除即銷毀；呼叫端另外負責停掉 ActionManager 上這隻魚的動作）。
+   * - 釋放：魚身 / 陰影 / 外掛材質、每個 SkinnedMesh 的骨架（骨骼貼圖 boneTexture 是 GPU 資源，不 dispose 會一直漏）
+   * - 不釋放：geometry、貼圖、動畫 clip（模板共用）、preserveMeshes 隱藏 part 的模板材質
+   */
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.fx.stopAll();
     this.deferred = [];
     this.animEnd = null;
+    this.currentAction = null;
+    this.hooks = {};
+    this.attachedTo = null;
     this.mixer.stopAllAction();
+    this.mixer.uncacheRoot(this.sprite);
+    for (const mx of this.pluginMixers) {
+      mx.stopAllAction();
+      mx.uncacheRoot(mx.getRoot());
+    }
+    this.pluginMixers = [];
     this.node.removeFromParent();
+    const skeletons = new Set<THREE.Skeleton>();
+    this.node.traverse((o) => {
+      if ((o as THREE.SkinnedMesh).isSkinnedMesh) skeletons.add((o as THREE.SkinnedMesh).skeleton);
+    });
+    for (const sk of skeletons) sk.dispose();
     for (const m of this.materials) m.dispose();
     for (const m of this.shadowMaterials) m.dispose();
-    this.node.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (mesh.isMesh && mesh.material instanceof THREE.MeshBasicMaterial) mesh.material.dispose();
-    });
+    for (const m of this.pluginMaterials) m.dispose();
   }
 }

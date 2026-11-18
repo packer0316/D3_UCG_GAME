@@ -2,21 +2,37 @@
  * UGC 規則（SPEC-UGC §4–§9）：魚卡、培養、抽卡、家園輪替表、裝飾物擺放、掉券
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { Random } from '../src/core/math/random';
+import type { FishDataFile } from '../src/game/path/PathTypes';
 import { FishType } from '../src/game/define/FishDefine';
 import { SceneType } from '../src/game/define/SceneDefine';
-import { BOSS_FISH_TYPES, CARD_FISH_TYPES, FISH_RARITY, cardOf, expandCards, isBossCard } from '../src/game/ugc/CardDefine';
-import { applyLevelUp, applyLevelUpAll, checkLevelUp, commissionRate, levelMultiplier, levelUpCost, planLevelUpAll } from '../src/game/ugc/CultivateRule';
+import { BOSS_FISH_TYPES, CARD_FISH_TYPES, CARD_ORIGINAL_ODDS, FISH_RARITY, cardOf, expandCards, isBossCard } from '../src/game/ugc/CardDefine';
+import {
+  applyLevelUp,
+  applyLevelUpAll,
+  checkLevelUp,
+  commissionRate,
+  fishMultiplier,
+  hasFixedOdds,
+  levelMultiplier,
+  levelUpCost,
+  nextBreakthrough,
+  planLevelUpAll,
+  popularityLevelFactor,
+  ticketLevelFactor,
+} from '../src/game/ugc/CultivateRule';
 import { DECO_GRID, canPlaceDeco, validateDecoLayout } from '../src/game/ugc/DecoDefine';
 import { GACHA_POOL, GACHA_RARITY_WEIGHT, applyGachaItem, gachaPoolOf, rollGacha } from '../src/game/ugc/GachaDefine';
 import { countBoss, homePopularity, incomePerSecond, slotFishIssue, validateSlots, visitorCount } from '../src/game/ugc/HomeRule';
-import { ticketBetFactor, ticketDrop } from '../src/game/ugc/TicketRule';
+import { TICKET_DROP_CHANCE, ticketDrop } from '../src/game/ugc/TicketRule';
 import { MAX_BOSS_PER_SLOT, MAX_LEVEL, MAX_SLOTS, STARTER_FISH } from '../src/game/ugc/UgcDefine';
 import type { HomeSlot, Rarity } from '../src/game/ugc/UgcTypes';
 import { createInitialProfile, sanitizeProfile } from '../src/server-fake/ugc/ProfileStore';
 import { NPC_HOMES } from '../src/server-fake/ugc/npcHomes';
 
 const all = () => true;
+const fishData = JSON.parse(readFileSync('public/res/Data/FishData.json', 'utf8')) as FishDataFile;
 const { Forest, Desert, Boss_Sky_Dusk: Sky } = SceneType;
 
 describe('魚卡', () => {
@@ -65,6 +81,8 @@ describe('家園輪替表', () => {
     expect(validateSlots([], all, all).ok).toBe(false);
     expect(validateSlots([slot(Forest, [])], all, all).ok).toBe(false);
     expect(validateSlots([slot(Forest, [1, 1])], all, all).ok).toBe(false);
+    expect(validateSlots(Array.from({ length: 8 }, () => slot(Forest, [1])), all, all).ok).toBe(true);
+    expect(validateSlots(Array.from({ length: 9 }, () => slot(Forest, [1])), all, all).reason).toContain('最多 8');
     expect(validateSlots(Array.from({ length: MAX_SLOTS + 1 }, () => slot(Forest, [1])), all, all).ok).toBe(false);
   });
 
@@ -93,78 +111,134 @@ describe('家園輪替表', () => {
 });
 
 describe('培養', () => {
-  it('倍率 / 抽成率隨等級上升', () => {
-    expect(levelMultiplier(1)).toBe(1);
-    expect(levelMultiplier(10)).toBeCloseTo(2.8);
+  it('原倍率：說明頁數字；1 ~ 11 與 FishData 賠率相同；只有獵龍騎士沒有', () => {
+    for (const t of CARD_FISH_TYPES) expect(CARD_ORIGINAL_ODDS[t] !== undefined, `fish ${t}`).toBe(t !== FishType.DragonSlainKnight);
+    for (const t of STARTER_FISH) expect(CARD_ORIGINAL_ODDS[t].odds, `fish ${t}`).toBe(fishData.Fishes.find((d) => d.Data === t)!.Odds);
+    expect(CARD_ORIGINAL_ODDS[FishType.AzureDragon]).toEqual({ odds: 40000, max: true });
+  });
+
+  it('倍率：原倍率 0.4 → 1.4 倍、前期慢；原倍率 < 10 固定 ×1；蒼龍翅膀跟著蒼龍', () => {
+    expect(levelMultiplier(1)).toBeCloseTo(0.4);
+    expect(levelMultiplier(MAX_LEVEL)).toBeCloseTo(1.4);
+    expect(levelMultiplier(50)).toBeCloseTo(0.748, 3);
+    // 前期慢：前一半等級升不到一半的幅度
+    expect(levelMultiplier(50) - 0.4).toBeLessThan(0.5);
+    for (let l = 1; l < MAX_LEVEL; l++) expect(levelMultiplier(l + 1)).toBeGreaterThan(levelMultiplier(l));
+    // 2 ~ 9 倍不動；10 倍（劍齒虎）開始套用
+    for (const t of [1, 2, 3, 4, 5, 6, 7]) {
+      expect(hasFixedOdds(t)).toBe(true);
+      expect(fishMultiplier(t, MAX_LEVEL)).toBe(1);
+    }
+    expect(hasFixedOdds(FishType.Smilodon)).toBe(false);
+    expect(fishMultiplier(FishType.Smilodon_G, 1)).toBeCloseTo(0.4);
+    expect(fishMultiplier(FishType.DragonSlainKnight, MAX_LEVEL)).toBeCloseTo(1.4);
+    expect(fishMultiplier(FishType.AzureDragonWing, 50)).toBe(levelMultiplier(50));
+  });
+
+  it('抽成 5% → 30%、掉券 ×1 → ×2、人氣 ×1 → ×3，都隨等級上升', () => {
     expect(commissionRate(1)).toBeCloseTo(0.05);
-    expect(commissionRate(10)).toBeCloseTo(0.095);
+    expect(commissionRate(MAX_LEVEL)).toBeCloseTo(0.3);
+    expect(commissionRate(50)).toBeCloseTo(0.1371, 4);
+    expect(ticketLevelFactor(1)).toBe(1);
+    expect(ticketLevelFactor(MAX_LEVEL)).toBeCloseTo(2);
+    expect(popularityLevelFactor(1)).toBe(1);
+    expect(popularityLevelFactor(MAX_LEVEL)).toBeCloseTo(3);
+    for (let l = 1; l < MAX_LEVEL; l++) expect(commissionRate(l + 1)).toBeGreaterThan(commissionRate(l));
   });
 
-  it('升級成本：碎片 + 金幣；滿級不能再升', () => {
-    expect(Array.from({ length: 9 }, (_, i) => levelUpCost('N', i + 1)!.copies)).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 5]);
-    expect(levelUpCost('SSR', 1)).toEqual({ copies: 1, gold: 400_000 });
-    expect(levelUpCost('SSR', 9)).toEqual({ copies: 2, gold: 3_600_000 });
+  it('升級成本：每 10 級突破要碎片，其他只要金幣；滿級不能再升', () => {
+    expect(MAX_LEVEL).toBe(100);
+    const breaks = (r: Rarity) => Array.from({ length: 9 }, (_, i) => levelUpCost(r, (i + 1) * 10)!.copies);
+    expect(breaks('N')).toEqual([1, 1, 2, 2, 3, 3, 4, 4, 5]);
+    expect(breaks('SSR')).toEqual([1, 1, 1, 1, 1, 2, 2, 2, 2]);
+    expect(levelUpCost('N', 1)).toEqual({ copies: 0, gold: 2_000 });
+    expect(levelUpCost('SSR', 99)).toEqual({ copies: 0, gold: 3_960_000 });
     expect(levelUpCost('N', MAX_LEVEL)).toBeNull();
-    for (const r of ['N', 'R', 'SR', 'SSR'] as Rarity[]) for (let l = 1; l < MAX_LEVEL; l++) expect(levelUpCost(r, l)!.copies).toBeGreaterThanOrEqual(1);
+    // 滿級總花費（SPEC-UGC §7 表）
+    const total = (r: Rarity) => {
+      let copies = 0;
+      let gold = 0;
+      for (let l = 1; l < MAX_LEVEL; l++) {
+        const c = levelUpCost(r, l)!;
+        if (l % 10 !== 0) expect(c.copies).toBe(0);
+        copies += c.copies;
+        gold += c.gold;
+      }
+      return { copies, gold };
+    };
+    expect(total('N')).toEqual({ copies: 25, gold: 9_900_000 });
+    expect(total('R')).toEqual({ copies: 21, gold: 29_700_000 });
+    expect(total('SR')).toEqual({ copies: 18, gold: 79_200_000 });
+    expect(total('SSR')).toEqual({ copies: 13, gold: 198_000_000 });
+    expect(nextBreakthrough('N', 1)).toEqual({ level: 10, copies: 1 });
+    expect(nextBreakthrough('N', 10)).toEqual({ level: 10, copies: 1 });
+    expect(nextBreakthrough('N', 41)).toEqual({ level: 50, copies: 3 });
+    expect(nextBreakthrough('N', 91)).toBeNull();
   });
 
-  it('碎片 / 金幣不足不能升；成功會扣碎片與金幣', () => {
+  it('突破碎片 / 金幣不足不能升；成功會扣碎片與金幣', () => {
     const p = createInitialProfile(0);
-    expect(checkLevelUp(p, 1).reason).toContain('碎片不足');
+    expect(checkLevelUp(p, 1)).toEqual({ ok: true });
     expect(checkLevelUp(p, 24).reason).toContain('尚未擁有');
-    p.fish[1].copies = 3;
     p.money = 10;
     expect(checkLevelUp(p, 1).reason).toContain('金幣不足');
     p.money = 100_000;
     expect(applyLevelUp(p, 1)).toEqual({ ok: true });
-    expect(p.fish[1]).toEqual({ level: 2, copies: 2 });
-    expect(p.money).toBe(80_000);
+    expect(p.fish[1]).toEqual({ level: 2, copies: 0 });
+    expect(p.money).toBe(98_000);
+    // Lv.10 → 11 是突破
+    p.fish[1].level = 10;
+    expect(checkLevelUp(p, 1).reason).toContain('碎片不足');
+    p.fish[1].copies = 3;
+    expect(applyLevelUp(p, 1)).toEqual({ ok: true });
+    expect(p.fish[1]).toEqual({ level: 11, copies: 2 });
+    expect(p.money).toBe(78_000);
     p.fish[1].level = MAX_LEVEL;
     expect(checkLevelUp(p, 1).reason).toContain('最高等級');
   });
 
-  it('一鍵升級：每張卡升到碎片用完、只算不改；套用後扣碎片與金幣（§7.1）', () => {
+  it('一鍵升級：每張卡升到突破碎片不夠、只算不改；套用後扣碎片與金幣（§7.1）', () => {
     const { Cub, TRex } = FishType;
     const p = createInitialProfile(0);
-    p.money = 100_000_000;
-    p.fish = { [Cub]: { level: 1, copies: 5 }, [TRex]: { level: 1, copies: 3 } };
-    // 幼幼龍（N）碎片 1+1+2 → Lv.4；帝王暴龍（SSR）碎片 1+1+1 → Lv.4
+    p.money = 1_000_000_000;
+    p.fish = { [Cub]: { level: 9, copies: 2 }, [TRex]: { level: 9, copies: 1 } };
+    // 幼幼龍（N）：突破 10、20 各 1 片 → 停在 Lv.30（下次要 2 片）；帝王暴龍（SSR）：突破 10 用 1 片 → 停在 Lv.20
     const expected = {
       upgrades: [
-        { fishType: Cub, from: 1, to: 4, copies: 4, gold: 120_000 },
-        { fishType: TRex, from: 1, to: 4, copies: 3, gold: 2_400_000 },
+        { fishType: Cub, from: 9, to: 30, copies: 2, gold: 2_000 * (435 - 36) },
+        { fishType: TRex, from: 9, to: 20, copies: 1, gold: 40_000 * (190 - 36) },
       ],
-      levels: 6,
-      copies: 7,
-      gold: 2_520_000,
+      levels: 32,
+      copies: 3,
+      gold: 798_000 + 6_160_000,
     };
     expect(planLevelUpAll(p)).toEqual(expected);
-    expect(p.fish[Cub]).toEqual({ level: 1, copies: 5 });
+    expect(p.fish[Cub]).toEqual({ level: 9, copies: 2 });
     expect(applyLevelUpAll(p)).toEqual(expected);
-    expect(p.fish[Cub]).toEqual({ level: 4, copies: 1 });
-    expect(p.fish[TRex]).toEqual({ level: 4, copies: 0 });
-    expect(p.money).toBe(100_000_000 - 2_520_000);
+    expect(p.fish[Cub]).toEqual({ level: 30, copies: 0 });
+    expect(p.fish[TRex]).toEqual({ level: 20, copies: 0 });
+    expect(p.money).toBe(1_000_000_000 - 6_958_000);
     // 沒有能升的 → 不改資料
     expect(applyLevelUpAll(p)).toMatchObject({ upgrades: [], levels: 0, gold: 0 });
-    expect(p.money).toBe(100_000_000 - 2_520_000);
+    expect(p.money).toBe(1_000_000_000 - 6_958_000);
   });
 
   it('一鍵升級：金幣有限時便宜的先（同價 → 等級低的先），預算不超過餘額', () => {
     const { Cub, Scolosaurus, TRex } = FishType;
     const p = createInitialProfile(0);
-    p.fish = { [Cub]: { level: 1, copies: 5 }, [TRex]: { level: 1, copies: 3 } };
+    p.fish = { [Cub]: { level: 1, copies: 0 }, [TRex]: { level: 1, copies: 0 } };
     p.money = 100_000_000;
-    // 預算 420,000：20k → 40k → 60k 都比帝王暴龍的 400k 便宜，剩下的錢不夠升帝王暴龍
-    expect(planLevelUpAll(p, 420_000)).toMatchObject({ upgrades: [{ fishType: Cub, from: 1, to: 4 }], levels: 3, gold: 120_000 });
+    // 預算 10,000：2k → 4k 比帝王暴龍的 40k 便宜，下一級 6k 超過剩下的 4k
+    expect(planLevelUpAll(p, 10_000)).toMatchObject({ upgrades: [{ fishType: Cub, from: 1, to: 3 }], levels: 2, gold: 6_000 });
     // 餘額比預算少 → 以餘額為準
-    p.money = 100_000;
-    expect(planLevelUpAll(p, 1e12)).toMatchObject({ upgrades: [{ fishType: Cub, to: 3 }], gold: 60_000 });
+    p.money = 5_000;
+    expect(planLevelUpAll(p, 1e12)).toMatchObject({ upgrades: [{ fishType: Cub, to: 2 }], gold: 2_000 });
     expect(planLevelUpAll(p, Number.NaN).levels).toBe(0);
     expect(planLevelUpAll(p, -1).levels).toBe(0);
-    // 同價：N Lv.3（60k）vs R Lv.1（60k）→ 等級低的先
-    p.fish = { [Cub]: { level: 3, copies: 10 }, [Scolosaurus]: { level: 1, copies: 10 } };
-    p.money = 60_000;
-    expect(planLevelUpAll(p).upgrades).toEqual([{ fishType: Scolosaurus, from: 1, to: 2, copies: 1, gold: 60_000 }]);
+    // 同價：N Lv.3（6k）vs R Lv.1（6k）→ 等級低的先
+    p.fish = { [Cub]: { level: 3, copies: 0 }, [Scolosaurus]: { level: 1, copies: 0 } };
+    p.money = 6_000;
+    expect(planLevelUpAll(p).upgrades).toEqual([{ fishType: Scolosaurus, from: 1, to: 2, copies: 0, gold: 6_000 }]);
   });
 });
 
@@ -251,19 +325,17 @@ describe('裝飾物擺放', () => {
 });
 
 describe('掉券', () => {
-  it('押注係數夾在 0.2 ~ 2；等級加成只在別人的家園', () => {
-    expect(ticketBetFactor(10)).toBe(0.2);
-    expect(ticketBetFactor(500)).toBe(1);
-    expect(ticketBetFactor(5000)).toBe(2);
-    expect(ticketDrop(1, false, 500, 10, false).chance).toBeCloseTo(0.015);
-    expect(ticketDrop(1, false, 500, 10, true).chance).toBeCloseTo(0.015 * 1.9);
+  it('打死怪物 10% 掉 1 張；等級加成只在別人的家園', () => {
+    expect(TICKET_DROP_CHANCE).toBe(0.1);
+    expect(ticketDrop(false, MAX_LEVEL, false)).toEqual({ chance: 0.1, count: 1 });
+    expect(ticketDrop(false, MAX_LEVEL, true).chance).toBeCloseTo(0.1 * 2);
+    expect(ticketDrop(false, 50, true).chance).toBeCloseTo(0.1 * ticketLevelFactor(50));
+    expect(ticketDrop(false, 1, true).chance).toBeCloseTo(0.1);
   });
 
-  it('Boss 大獎必掉 3 張、小獎（不死）10% 1 張', () => {
-    expect(ticketDrop(FishType.TRex, false, 10, 1, false)).toEqual({ chance: 0.2, count: 3 });
-    expect(ticketDrop(FishType.TRex, false, 500, 1, false)).toEqual({ chance: 1, count: 3 });
-    expect(ticketDrop(FishType.TRex, true, 500, 1, false)).toEqual({ chance: 0.1, count: 1 });
-    expect(ticketDrop(FishType.AzureDragonWing, false, 500, 1, false).count).toBe(1);
+  it('給獎但魚沒死（Boss 小獎等）不掉', () => {
+    expect(ticketDrop(true, 1, false)).toEqual({ chance: 0, count: 0 });
+    expect(ticketDrop(true, MAX_LEVEL, true)).toEqual({ chance: 0, count: 0 });
   });
 });
 
@@ -282,7 +354,7 @@ describe('存檔整理', () => {
     expect(sanitizeProfile({ version: 2 }, 0)).toBeNull();
     const raw = JSON.parse(JSON.stringify(createInitialProfile(0)));
     raw.tickets = 77;
-    raw.fish[24] = { level: 99, copies: 4 };
+    raw.fish[24] = { level: 999, copies: 4 };
     raw.home.slots = [{ sceneType: Forest, fishTypes: [26] }]; // 風神翼龍不能放森林，而且沒有這張卡
     raw.home.deco = [{ id: 'cube_white', x: 999, y: 0, rot: 0 }];
     const p = sanitizeProfile(raw, 5000)!;

@@ -143,7 +143,13 @@ export class FishSystem implements TimelineListener {
       return;
     }
     if (!this.shadowVisible) fish.shadowVisible = false;
-    this.alive.get(fish.serial)?.destroy();
+    // 同序號重複生成：舊的釋放並通知移除（掛在牠身上的魚保留，與原本行為相同）
+    const old = this.alive.get(fish.serial);
+    if (old) {
+      this.alive.delete(old.serial);
+      this.release(old);
+      this.ctx.events.emit('fish:remove', { serial: old.serial });
+    }
     this.alive.set(fish.serial, fish);
     this.ctx.layers.fish.add(fish.node);
     this.ctx.events.emit('fish:spawn', { fish });
@@ -177,9 +183,15 @@ export class FishSystem implements TimelineListener {
   /** 直接移除（離場，不播死亡表演）；掛在牠身上的魚一起移除 */
   private remove(fish: Fish): void {
     if (!this.alive.delete(fish.serial)) return;
-    fish.destroy();
+    this.release(fish);
     this.ctx.events.emit('fish:remove', { serial: fish.serial });
     this.removeAttached(fish);
+  }
+
+  /** 魚不重用：停掉掛在牠身上的所有動作（受擊白閃 / 晃動 / 雷擊脈動 / 死亡表演），再釋放模型資源 */
+  private release(fish: Fish): void {
+    this.ctx.actions.stopAll(fish);
+    fish.destroy();
   }
 
   /** 父魚離場 / 死亡 → 掛在牠身上的魚（蒼龍翅膀）一起移除（原版 DestroyByEvent） */
@@ -218,7 +230,7 @@ export class FishSystem implements TimelineListener {
     this.removeAttached(fish);
     this.killedShow.play(fish, () => {
       this.dying.delete(fish);
-      fish.destroy();
+      this.release(fish);
     });
   }
 

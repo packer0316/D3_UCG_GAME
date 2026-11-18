@@ -2,6 +2,7 @@
  * 玩家資產存檔（SPEC-UGC §3）：瀏覽器用 localStorage，測試用記憶體。
  * 資產有變動就 markDirty()，由 FakeServer 的 tick 節流寫入（最多每 2 秒一次），離開頁面時再寫一次。
  */
+import { isFishAllowedInScene } from '@game/define/SceneDefine';
 import { FISH_RARITY, SCENE_RARITY } from '@game/ugc/CardDefine';
 import { getDecoDefine, validateDecoLayout } from '@game/ugc/DecoDefine';
 import { createDefaultHome, validateSlots } from '@game/ugc/HomeRule';
@@ -105,7 +106,13 @@ export function sanitizeProfile(raw: unknown, now: number): PlayerProfile | null
     p.home.lastAccrueAt = Math.min(now, num(h.lastAccrueAt, now));
     const ownedFish = (t: number) => !!p.fish[t];
     const ownedScene = (s: number) => p.scenes.includes(s);
-    if (validateSlots(h.slots, ownedFish, ownedScene).ok) p.home.slots = h.slots.map((s) => ({ sceneType: s.sceneType, fishTypes: [...s.fishTypes] }));
+    // 場景限定魚種改版（天空場景只能放 5 種龍）：舊存檔先拿掉該場景不能放的龍、空掉的格子移除，其餘設定保留
+    const slots = Array.isArray(h.slots)
+      ? h.slots
+          .map((s) => (s && Array.isArray(s.fishTypes) ? { ...s, fishTypes: s.fishTypes.filter((t) => isFishAllowedInScene(t, s.sceneType)) } : s))
+          .filter((s) => !s || !Array.isArray(s.fishTypes) || s.fishTypes.length > 0)
+      : h.slots;
+    if (validateSlots(slots, ownedFish, ownedScene).ok) p.home.slots = slots.map((s) => ({ sceneType: s.sceneType, fishTypes: [...s.fishTypes] }));
     if (validateDecoLayout(h.deco, p.decos).ok) p.home.deco = h.deco.map((d) => ({ id: d.id, x: d.x, y: d.y, rot: d.rot }));
   }
   return p;

@@ -2,12 +2,12 @@
  * 射擊：開砲扣款（押注 × 成本倍率）、命中判定（RtpEngine，可一次多條魚）、DUD 退款。
  *
  * UGC（SPEC-UGC §4、§7、§8.2）：
- * - 家園：魚卡等級 → 賠率倍率（中獎機率等比例變低）
+ * - 家園：魚卡等級 → 賠率倍率（原倍率的 0.4 ~ 1.4 倍；原倍率 < 10 固定；中獎機率與倍率成反比）
  * - 別人的家園：命中的子彈抽成給屋主（開砲成本 × 抽成率），這顆子彈的 RTP = 目標 − 抽成率
- * - 公有地 / 別人的家園：中獎時擲抽卡券（自己的家園不掉）
+ * - 公有地 / 別人的家園：打死怪物時 10% 掉抽卡券（自己的家園不掉）
  */
 import '@game/ugc/UgcProtocol';
-import { commissionRate, levelMultiplier } from '@game/ugc/CultivateRule';
+import { commissionRate } from '@game/ugc/CultivateRule';
 import { ticketDrop } from '@game/ugc/TicketRule';
 import type { FakeServer, FakeServerModule } from '../FakeServer';
 
@@ -67,7 +67,7 @@ export class ShootModule implements FakeServerModule {
         this.refund(req.bulletId, b);
         return;
       }
-      // 魚卡等級 → 倍率；別人的家園：抽成（依被打中的龍的等級，多隻取平均）從這顆子彈的 RTP 扣
+      // 魚卡等級 → 倍率（公有地 ×1）；別人的家園：抽成（依被打中的龍的等級，多隻取平均）從這顆子彈的 RTP 扣
       const levels = targets.map((t) => room().fishLevel(t.fish.fishType));
       const othersHome = room().isOthersHome;
       const rate = othersHome ? levels.reduce((s, l) => s + commissionRate(l), 0) / levels.length : 0;
@@ -77,7 +77,7 @@ export class ShootModule implements FakeServerModule {
         targets.map((t) => t.fish.fishType),
         b.bet,
         b.cost / b.bet,
-        { rtp: server.rtp.targetRtp - rate, mults: levels.map(levelMultiplier) },
+        { rtp: server.rtp.targetRtp - rate, mults: targets.map((t) => room().fishMultiplier(t.fish.fishType)) },
       );
       // 自己的家園不掉券
       const dropsTickets = !room().current.isMine;
@@ -87,7 +87,7 @@ export class ShootModule implements FakeServerModule {
         const money = room().addMoney(result.money);
         const unDead = !!result.outcome.unDead;
         if (!unDead) server.script.killFish(id);
-        if (dropsTickets) this.rollTicket(id, fish.fishType, unDead, b.bet, levels[i], othersHome);
+        if (dropsTickets) this.rollTicket(id, unDead, levels[i], othersHome);
         server.send('G2U_KILL_FLOATODDS_FISH_NOTIFY', {
           accountId: room().self.accountId,
           scriptIdData: id,
@@ -113,10 +113,10 @@ export class ShootModule implements FakeServerModule {
     });
   }
 
-  /** 中獎擲抽卡券；掉了就在擊殺通知之前送（client 還找得到那隻魚的位置） */
-  private rollTicket(id: { groupIndex: number; fishIndex: number }, fishType: number, unDead: boolean, bet: number, level: number, levelBonus: boolean): void {
-    const drop = ticketDrop(fishType, unDead, bet, level, levelBonus);
-    if (this.server.rng.next() >= drop.chance) return;
+  /** 打死怪物擲抽卡券（§4：10%）；掉了就在擊殺通知之前送（client 還找得到那隻魚的位置） */
+  private rollTicket(id: { groupIndex: number; fishIndex: number }, unDead: boolean, level: number, levelBonus: boolean): void {
+    const drop = ticketDrop(unDead, level, levelBonus);
+    if (!drop.count || this.server.rng.next() >= drop.chance) return;
     const store = this.server.profile;
     store.profile.tickets += drop.count;
     store.profile.stats.ticketsEarned += drop.count;

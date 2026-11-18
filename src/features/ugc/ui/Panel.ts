@@ -34,9 +34,13 @@ export class Panel {
     this.titleEl = el('div', 'ugc-panel-title', opts.title);
     const close = el('button', 'ugc-panel-close', '✕');
     close.title = '關閉（Esc）';
+    close.setAttribute('aria-label', '關閉');
     close.addEventListener('click', () => this.close());
     this.body = el('div', 'ugc-panel-body');
     this.win = el('div', `ugc-panel ${opts.className ?? ''}`.trim(), el('div', 'ugc-panel-head', this.titleEl, close), this.body);
+    this.win.setAttribute('role', 'dialog');
+    this.win.setAttribute('aria-modal', 'true');
+    this.win.setAttribute('aria-label', opts.title);
     this.root = el('div', 'ugc-backdrop ui-interactive hidden', this.win);
     // 點遮罩（不是視窗）關閉
     this.root.addEventListener('pointerdown', (e) => {
@@ -65,6 +69,7 @@ export class Panel {
 
   setTitle(text: string): void {
     this.titleEl.textContent = text;
+    this.win.setAttribute('aria-label', text);
   }
 
   get isOpen(): boolean {

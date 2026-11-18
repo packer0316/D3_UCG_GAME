@@ -38,6 +38,39 @@ export const FISH_RARITY: Readonly<Record<number, Rarity>> = {
   [FishType.AzureDragon]: 'SSR',
 };
 
+/** 原倍率：原專案說明頁（DragonTycoon3 DinosaurExport/ratioTable）標示的倍率 */
+export interface OriginalOdds {
+  odds: number;
+  /** 說明頁寫「最高 N 倍」（含暴獎 / 龍王表演） */
+  max?: true;
+}
+
+/** 魚卡 → 原倍率（SPEC-UGC §7）。獵龍騎士的說明頁只有佔領彩金，沒有倍率 → 不列 */
+export const CARD_ORIGINAL_ODDS: Readonly<Record<number, OriginalOdds>> = {
+  [FishType.Cub]: { odds: 2 },
+  [FishType.Egg_S]: { odds: 3 },
+  [FishType.Egg_M]: { odds: 4 },
+  [FishType.Velociraptor]: { odds: 5 },
+  [FishType.Corythosaurus]: { odds: 6 },
+  [FishType.Triceratops_M]: { odds: 8 },
+  [FishType.Triceratops_F]: { odds: 9 },
+  [FishType.Smilodon]: { odds: 10 },
+  [FishType.Smilodon_G]: { odds: 50 },
+  [FishType.Stegosaurus_G]: { odds: 60 },
+  [FishType.Pterosau]: { odds: 100 },
+  [FishType.Scolosaurus]: { odds: 1000, max: true },
+  [FishType.Stegosaurus]: { odds: 2000, max: true },
+  [FishType.Spinosaurus]: { odds: 3000, max: true },
+  [FishType.Therizinosaurus]: { odds: 800, max: true },
+  [FishType.Pachycephalosaurus]: { odds: 800, max: true },
+  [FishType.Pyroraptor]: { odds: 800, max: true },
+  [FishType.TreeGoblin]: { odds: 15000, max: true },
+  [FishType.TRex]: { odds: 30000, max: true },
+  [FishType.Scorpion]: { odds: 20000, max: true },
+  [FishType.Quetzalcoatlus]: { odds: 20000, max: true },
+  [FishType.AzureDragon]: { odds: 40000, max: true },
+};
+
 /** 所有魚卡（依 fishType 排序） */
 export const CARD_FISH_TYPES: readonly number[] = Object.keys(FISH_RARITY)
   .map(Number)

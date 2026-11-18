@@ -5,6 +5,7 @@
 import type { GameContext } from '@game/GameContext';
 import type { UgcClient } from '../UgcClient';
 import { el, fmt, sceneName } from './dom';
+import { uiIcon } from './icons';
 
 export interface TopBarActions {
   rooms(): void;
@@ -23,23 +24,27 @@ export class TopBar {
   private readonly incomeBadge = el('span', 'ugc-badge gold hidden');
   private readonly visit = el('div', 'ugc-visit hidden');
   private sceneType = -1;
+  private readonly buttons = new Map<keyof TopBarActions, HTMLButtonElement>();
 
   constructor(
     ctx: GameContext,
     private readonly ugc: UgcClient,
     actions: TopBarActions,
   ) {
-    const room = el('button', 'ugc-chip', this.roomName, this.roomSub);
+    const room = el('button', 'ugc-chip', uiIcon('rooms'), el('span', 'ugc-room-copy', this.roomName, this.roomSub), el('span', 'ugc-nav-chevron', '⌄'));
     room.title = '房間列表';
     room.addEventListener('click', actions.rooms);
-    const cards = el('button', 'ugc-btn', '魚卡');
+    const cards = el('button', 'ugc-btn ugc-nav-button', uiIcon('cards'), '魚卡');
     cards.addEventListener('click', actions.cards);
-    this.gachaButton = el('button', 'ugc-btn', '抽卡', this.ticketBadge);
+    this.gachaButton = el('button', 'ugc-btn ugc-nav-button', uiIcon('gacha'), '抽卡', this.ticketBadge);
     this.gachaButton.addEventListener('click', actions.gacha);
-    const home = el('button', 'ugc-btn', '家園', this.incomeBadge);
+    const home = el('button', 'ugc-btn ugc-nav-button', uiIcon('home'), '家園', this.incomeBadge);
     home.addEventListener('click', actions.home);
 
-    this.root = el('div', 'ugc-topbar ui-interactive', room, cards, this.gachaButton, home, this.visit);
+    this.buttons.set('rooms', room).set('cards', cards).set('gacha', this.gachaButton).set('home', home);
+    for (const b of this.buttons.values()) { b.setAttribute('aria-haspopup', 'dialog'); b.setAttribute('aria-expanded', 'false'); }
+    this.root = el('div', 'ugc-topbar ui-interactive', el('div', 'ugc-nav-dock', room, cards, this.gachaButton, home), this.visit);
+    this.root.setAttribute('aria-label', '遊戲功能');
     // 功能列上的點擊不要變成開砲
     this.root.addEventListener('pointerdown', (e) => e.stopPropagation());
     ctx.ui.layers.hud.appendChild(this.root);
@@ -54,6 +59,13 @@ export class TopBar {
     events.on('ugc:income', () => this.renderIncome());
     events.on('ugc:commission', () => this.renderRoom());
     this.renderRoom();
+  }
+
+  setActive(name: keyof TopBarActions | null): void {
+    for (const [key, button] of this.buttons) {
+      button.classList.toggle('active', key === name);
+      button.setAttribute('aria-expanded', String(key === name));
+    }
   }
 
   private renderRoom(): void {
@@ -75,6 +87,7 @@ export class TopBar {
   private renderIncome(): void {
     const pending = this.ugc.income?.pending ?? 0;
     this.incomeBadge.textContent = `+${fmt(pending)}`;
+    this.incomeBadge.title = `家園收益待領取 ${fmt(pending)}`;
     this.incomeBadge.classList.toggle('hidden', pending < 1);
   }
 }

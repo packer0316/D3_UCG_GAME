@@ -284,7 +284,38 @@ describe('場景輪替', () => {
 });
 
 describe('倍率 / 抽成 / 掉券', () => {
-  it('家園：魚卡等級 → 賠率倍率（蛋蛋收藏家 Lv.10 → ×2.8）', () => {
+  it('家園：魚卡等級 → 賠率倍率（原倍率 ×0.4 ~ ×1.4；原倍率 < 10 固定）', () => {
+    // 翼龍（100 倍）Lv.100、黃金劍龍（60 倍）Lv.1、幼幼龍（2 倍）Lv.100
+    const h = boot({
+      wall: 0,
+      profile: (p) => {
+        p.fish[11].level = 100;
+        p.fish[1].level = 100;
+      },
+    });
+    login(h);
+    enter(h, MY_HOME_ROOM_ID);
+    h.server.rtp.cheatMode = true;
+    const kill = (fishType: number) => {
+      for (let i = 0; i < 300; i++) {
+        const f = liveFish(h).find((x) => x.fishType === fishType);
+        if (f) return shootAt(h, f.id, 500)[0];
+        h.advance(1000, 500);
+      }
+      throw new Error(`fish ${fishType} never spawned`);
+    };
+    const ptero = kill(11);
+    expect(ptero.floatedOdds).toBeCloseTo(100 * levelMultiplier(100));
+    expect(ptero.money).toBe(500 * 140);
+    const steg = kill(10);
+    expect(steg.floatedOdds).toBeCloseTo(60 * 0.4);
+    expect(steg.money).toBe(500 * 24);
+    const cub = kill(1);
+    expect(cub.floatedOdds).toBe(2);
+    expect(cub.money).toBe(500 * 2);
+  });
+
+  it('蛋蛋收藏家 Lv.100：倍率固定（原倍率 < 10），抽成 30%', () => {
     const h = boot({ wall: 0 });
     login(h);
     enter(h, NPC_HOMES.find((n) => n.name === '蛋蛋收藏家')!.roomId);
@@ -292,9 +323,10 @@ describe('倍率 / 抽成 / 掉券', () => {
     const cub = liveFish(h).find((f) => f.fishType === 1)!;
     expect(cub).toBeDefined();
     const [kill] = shootAt(h, cub.id, 500);
-    // 幼幼龍賠率 2
-    expect(kill.floatedOdds).toBeCloseTo(2 * levelMultiplier(10));
-    expect(kill.money).toBe(Math.round(500 * 2 * 2.8));
+    expect(kill.floatedOdds).toBe(2);
+    expect(kill.money).toBe(1000);
+    expect(h.server.room.visitCommission).toBeCloseTo(500 * commissionRate(100));
+    expect(commissionRate(100)).toBeCloseTo(0.3);
   });
 
   it('公有地倍率一律 ×1', () => {
@@ -341,7 +373,7 @@ describe('倍率 / 抽成 / 掉券', () => {
     expect(mine.rtp).toBeLessThan(1.1 + 0.06);
   });
 
-  it('掉券：公有地 / 別人的家園會掉，自己的家園不掉；通知排在擊殺通知之前', () => {
+  it('掉券：打死怪物 10% 掉 1 張；公有地 / 別人的家園會掉，自己的家園不掉；通知排在擊殺通知之前', () => {
     const tickets = (roomId: number) => {
       const h = boot({ wall: 0, seed: 5 });
       login(h);
@@ -349,6 +381,7 @@ describe('倍率 / 抽成 / 掉券', () => {
       h.server.rtp.cheatMode = true; // 每發都中獎 → 每發都擲券
       const before = h.profile.tickets;
       let order = true;
+      let kills = 0;
       for (let round = 0; round < 300; round++) {
         for (const f of liveFish(h).filter((x) => x.fishType <= 11)) {
           const id = ++bulletId;
@@ -356,16 +389,21 @@ describe('倍率 / 抽成 / 掉券', () => {
           h.sent.length = 0;
           h.req('U2G_HIT_REQ', { bulletId: id, scriptIdDataVec: [f.id] });
           const cmds = h.sent.map((m) => m.cmd);
+          const kill = h.sent.find((m) => m.cmd === 'G2U_KILL_FLOATODDS_FISH_NOTIFY')?.data as { unDead: boolean } | undefined;
+          if (kill && !kill.unDead) kills++;
           const drop = cmds.indexOf('G2U_TICKET_DROP_NOTIFY');
           if (drop >= 0 && drop > cmds.indexOf('G2U_KILL_FLOATODDS_FISH_NOTIFY')) order = false;
-          if (drop >= 0) expect(h.sent[drop].data).toMatchObject({ scriptIdData: f.id, tickets: h.profile.tickets });
+          if (drop >= 0) expect(h.sent[drop].data).toMatchObject({ scriptIdData: f.id, count: 1, tickets: h.profile.tickets });
         }
         h.advance(1000, 500);
       }
-      return { gained: h.profile.tickets - before, order, stats: h.profile.stats.ticketsEarned };
+      return { gained: h.profile.tickets - before, kills, order, stats: h.profile.stats.ticketsEarned };
     };
     const pub = tickets(PUBLIC_ROOM_ID);
-    expect(pub.gained).toBeGreaterThan(5);
+    expect(pub.kills).toBeGreaterThan(300);
+    // 公有地固定 10%（不看押注）
+    expect(pub.gained / pub.kills).toBeGreaterThan(0.07);
+    expect(pub.gained / pub.kills).toBeLessThan(0.13);
     expect(pub.order).toBe(true);
     expect(pub.stats).toBe(pub.gained);
     expect(tickets(3).gained).toBeGreaterThan(5);
@@ -396,53 +434,92 @@ describe('抽卡 / 培養', () => {
     expect(h.last('G2U_GACHA_DRAW_ACK')!.ok).toBe(false);
   });
 
-  it('升級：扣碎片與金幣、餘額同步；人在自己的家園時倍率立即生效', () => {
-    const h = boot({ wall: 0, profile: (p) => (p.fish[1].copies = 5) });
+  it('升級：扣碎片與金幣、餘額同步；人在自己的家園時倍率立即生效；突破缺碎片失敗', () => {
+    const h = boot({
+      wall: 0,
+      profile: (p) => {
+        p.fish[9].copies = 5;
+        p.fish[10].level = 10;
+      },
+    });
     login(h);
     enter(h, MY_HOME_ROOM_ID);
+    expect(h.server.room.fishMultiplier(9)).toBeCloseTo(0.4);
     h.sent.length = 0;
-    h.req('U2G_CARD_LEVELUP_REQ', { fishType: 1 });
-    expect(h.last('G2U_CARD_LEVELUP_ACK')).toEqual({ ok: true, fishType: 1, level: 2 });
-    expect(h.profile.fish[1]).toEqual({ level: 2, copies: 4 });
-    expect(h.profile.money).toBe(INITIAL_MONEY - 20_000);
-    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: 0, seatMoney: INITIAL_MONEY - 20_000 });
-    expect(h.last('G2U_ROOM_INFO_NOTIFY')!.room.levels[1]).toBe(2);
-    expect(h.server.room.fishLevel(1)).toBe(2);
+    h.req('U2G_CARD_LEVELUP_REQ', { fishType: 9 });
+    expect(h.last('G2U_CARD_LEVELUP_ACK')).toEqual({ ok: true, fishType: 9, level: 2 });
+    expect(h.profile.fish[9]).toEqual({ level: 2, copies: 5 });
+    expect(h.profile.money).toBe(INITIAL_MONEY - 2_000);
+    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: 0, seatMoney: INITIAL_MONEY - 2_000 });
+    expect(h.last('G2U_ROOM_INFO_NOTIFY')!.room.levels[9]).toBe(2);
+    expect(h.server.room.fishLevel(9)).toBe(2);
+    expect(h.server.room.fishMultiplier(9)).toBeCloseTo(levelMultiplier(2));
 
+    // 黃金劍龍 Lv.10 → 11 是突破，沒有碎片
+    h.req('U2G_CARD_LEVELUP_REQ', { fishType: 10 });
+    expect(h.last('G2U_CARD_LEVELUP_ACK')).toMatchObject({ ok: false, fishType: 10 });
     h.req('U2G_CARD_LEVELUP_REQ', { fishType: 24 });
     expect(h.last('G2U_CARD_LEVELUP_ACK')).toMatchObject({ ok: false, fishType: 24 });
+    // 公有地一律 ×1
+    enter(h, PUBLIC_ROOM_ID);
+    expect(h.server.room.fishMultiplier(9)).toBe(1);
   });
 
   it('一鍵升級：以 maxGold 為預算一次升完、餘額同步、房間等級更新；沒有可升的回失敗（§7.1）', () => {
-    const h = boot({ wall: 0, profile: (p) => (p.fish[1].copies = 5) });
+    // 只有幼幼龍能突破（碎片 3）：其他卡停在 Lv.10 沒碎片
+    const h = boot({
+      wall: 0,
+      profile: (p) => {
+        for (const t of STARTER_FISH) p.fish[t].level = 10;
+        p.fish[1].copies = 3;
+      },
+    });
     login(h);
     enter(h, MY_HOME_ROOM_ID);
     h.sent.length = 0;
-    // 預算 100,000：20k + 40k，下一級 60k 超過剩下的 40k
+    // 預算 100,000：突破 10→11（20k，1 片）+ 22k + 24k + 26k = 92k，下一級 28k 超過剩下的 8k
     h.req('U2G_CARD_LEVELUP_ALL_REQ', { maxGold: 100_000 });
     expect(h.take('G2U_CARD_LEVELUP_ALL_ACK')).toEqual([
-      { ok: true, upgrades: [{ fishType: 1, from: 1, to: 3, copies: 2, gold: 60_000 }], levels: 2, copies: 2, gold: 60_000 },
+      { ok: true, upgrades: [{ fishType: 1, from: 10, to: 14, copies: 1, gold: 92_000 }], levels: 4, copies: 1, gold: 92_000 },
     ]);
-    expect(h.profile.fish[1]).toEqual({ level: 3, copies: 3 });
-    expect(h.profile.money).toBe(INITIAL_MONEY - 60_000);
-    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: 0, seatMoney: INITIAL_MONEY - 60_000 });
-    expect(h.last('G2U_ROOM_INFO_NOTIFY')!.room.levels[1]).toBe(3);
-    expect(h.last('G2U_PROFILE_NOTIFY')!.profile.fish[1]).toEqual({ level: 3, copies: 3 });
+    expect(h.profile.fish[1]).toEqual({ level: 14, copies: 2 });
+    expect(h.profile.money).toBe(INITIAL_MONEY - 92_000);
+    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: 0, seatMoney: INITIAL_MONEY - 92_000 });
+    expect(h.last('G2U_ROOM_INFO_NOTIFY')!.room.levels[1]).toBe(14);
+    expect(h.last('G2U_PROFILE_NOTIFY')!.profile.fish[1]).toEqual({ level: 14, copies: 2 });
 
-    // 預算夠：碎片 3 → 再升 1 級（Lv.3 → 4 要 2 片）
+    // 預算夠：一路升到 Lv.30（突破 20 用 1 片；Lv.30 → 31 要 2 片，只剩 1 片）
     h.req('U2G_CARD_LEVELUP_ALL_REQ', { maxGold: INITIAL_MONEY });
-    expect(h.take('G2U_CARD_LEVELUP_ALL_ACK')[0]).toMatchObject({ ok: true, levels: 1, gold: 60_000 });
-    expect(h.profile.fish[1]).toEqual({ level: 4, copies: 1 });
+    expect(h.take('G2U_CARD_LEVELUP_ALL_ACK')[0]).toMatchObject({ ok: true, levels: 16, copies: 1, gold: 2_000 * (435 - 91) });
+    expect(h.profile.fish[1]).toEqual({ level: 30, copies: 1 });
 
     h.sent.length = 0;
     h.req('U2G_CARD_LEVELUP_ALL_REQ', { maxGold: INITIAL_MONEY });
     expect(h.last('G2U_CARD_LEVELUP_ALL_ACK')).toMatchObject({ ok: false, reason: '沒有可升級的魚卡', levels: 0 });
     expect(h.last('G2U_PROFILE_NOTIFY')).toBeUndefined();
-    expect(h.profile.money).toBe(INITIAL_MONEY - 120_000);
+    expect(h.profile.money).toBe(INITIAL_MONEY - 92_000 - 688_000);
   });
 });
 
 describe('家園設定 / 收益', () => {
+  it('8 格輪替可儲存與重新登入；第 9 格拒絕且保留原配置', () => {
+    const h = boot();
+    login(h);
+    const slots = Array.from({ length: 8 }, (_, i) => ({ sceneType: Forest, fishTypes: [i + 1] }));
+    h.req('U2G_HOME_SAVE_REQ', { slots });
+    expect(h.last('G2U_HOME_SAVE_ACK')).toEqual({ ok: true });
+    expect(h.profile.home.slots).toEqual(slots);
+    h.req('U2G_HOME_SAVE_REQ', { slots: [...slots, { sceneType: Forest, fishTypes: [9] }] });
+    expect(h.last('G2U_HOME_SAVE_ACK')).toEqual({ ok: false, reason: '最多 8 個場景' });
+    expect(h.profile.home.slots).toEqual(slots);
+    h.server.profile.flush();
+    const restored = boot({ storage: h.storage });
+    login(restored);
+    expect(restored.profile.home.slots).toEqual(slots);
+    enter(restored, MY_HOME_ROOM_ID);
+    expect(restored.last('G2U_ROOM_INFO_NOTIFY')!.room.slots).toEqual(slots);
+  });
+
   it('存輪替表：驗證失敗不存；成功後人在家就從第一格重新開始', () => {
     const h = boot({ wall: 0, profile: (p) => p.scenes.push(Desert) });
     login(h);

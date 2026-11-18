@@ -390,7 +390,8 @@ export class DecorMode {
     this.allFilter.setAttribute('aria-pressed', String(this.paletteFilter === 'all'));
     this.ownedFilter.setAttribute('aria-pressed', String(this.paletteFilter === 'owned'));
     let any = false;
-    for (const def of [...DECO_DEFINES].sort((a,b)=>Number(!!b.model)-Number(!!a.model))) {
+    // 花園珍藏排前面，積木在後
+    for (const def of [...DECO_DEFINES].sort((a,b)=>Number(b.model==='artisan')-Number(a.model==='artisan'))) {
       const total = owned[def.id] ?? 0;
       if (this.paletteFilter === 'owned' && total <= 0) continue;
       any = true;

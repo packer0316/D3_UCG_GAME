@@ -1,15 +1,16 @@
 /**
  * 裝飾物 → 3D 物件（SPEC-UGC §9.6）。
  *
- * 花園珍藏由 ArtisanDeco 建立專屬模型；其他擴充可註冊：
+ * 花園珍藏（model: 'artisan'）由 ArtisanDeco、卡扣積木（model: 'brick'）由 BrickDeco 建立；其他擴充可註冊：
  *   registerDecoBuilder('sofa_red', (def, rot) => 你的 THREE.Object3D)
  * 物件原點 = 佔地中心、貼地（z = 0），+Z 朝上；佔地大小見 decoFootprint × DECO_GRID.cell。
- * 沒有註冊 builder 的物品一律畫成 DecoDefine.color 的方塊。
+ * 都沒有的物品畫成 DecoDefine.color 的方塊。
  */
 import * as THREE from 'three';
 import { DECO_GRID, decoFootprint, decoWorldRect, getDecoDefine, type DecoDefine } from '@game/ugc/DecoDefine';
 import type { DecoPlacement } from '@game/ugc/UgcTypes';
 import { buildArtisanDeco } from './ArtisanDeco';
+import { buildBrickDeco } from './BrickDeco';
 
 export interface DecoObjectOptions {
   /** 半透明預覽（拿在手上還沒放下） */
@@ -71,7 +72,8 @@ function createBox(def: DecoDefine, rot: 0 | 1, opts: DecoObjectOptions): THREE.
 
 /** 建立一件裝飾物（原點 = 佔地中心） */
 export function createDecoObject(def: DecoDefine, rot: 0 | 1, opts: DecoObjectOptions = {}): THREE.Object3D {
-  const obj = (builders.get(def.id) ?? (def.model === 'artisan' ? buildArtisanDeco : createBox))(def, rot, opts);
+  const builder = builders.get(def.id) ?? (def.model === 'artisan' ? buildArtisanDeco : def.model === 'brick' ? buildBrickDeco : createBox);
+  const obj = builder(def, rot, opts);
   obj.name = `deco_${def.id}`;
   return obj;
 }

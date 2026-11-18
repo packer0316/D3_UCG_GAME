@@ -16,11 +16,11 @@ export const SYSTEM_ACCOUNT_ID = 0;
 /** 每個場景格的秒數 */
 export const SLOT_SECONDS = 150;
 /** 輪替表最多幾格 */
-export const MAX_SLOTS = 6;
+export const MAX_SLOTS = 8;
 /** 每個場景格最多放幾種 Boss */
 export const MAX_BOSS_PER_SLOT = 3;
 /** 魚卡等級上限 */
-export const MAX_LEVEL = 10;
+export const MAX_LEVEL = 100;
 
 // ---- 初始資產（SPEC-UGC §3.1）
 export const INITIAL_MONEY = 31_708_504;

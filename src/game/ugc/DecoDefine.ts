@@ -15,23 +15,24 @@ export interface DecoDefine {
   d: number;
   /** 高度（格） */
   h: number;
-  /** 佔位方塊的顏色（0xRRGGBB） */
+  /** 顏色（0xRRGGBB）：積木的塑膠顏色；沒有模型時的方塊顏色 */
   color: number;
   rarity: Rarity;
-  /** 模型識別碼；artisan 使用專屬程序化模型。 */
+  /** 模型識別碼；artisan = 花園珍藏的專屬程序化模型，brick = 卡扣積木（§9.6.1） */
   model?: string;
   description?: string;
 }
 
 /** 舊物品保留原 ID，既有家園配置與持有數不會失效。 */
 export const DECO_DEFINES: readonly DecoDefine[] = [
-  { id: 'cube_white', name: '小方塊（白）', w: 1, d: 1, h: 1, color: 0xe8edf2, rarity: 'N' },
-  { id: 'cube_red', name: '小方塊（紅）', w: 1, d: 1, h: 1, color: 0xd9534f, rarity: 'N' },
-  { id: 'cube_blue', name: '小方塊（藍）', w: 1, d: 1, h: 1, color: 0x3d8bd9, rarity: 'N' },
-  { id: 'bar_yellow', name: '長方塊（黃）', w: 2, d: 1, h: 1, color: 0xe6b422, rarity: 'R' },
-  { id: 'block_green', name: '大方塊（綠）', w: 2, d: 2, h: 2, color: 0x4caf6a, rarity: 'R' },
-  { id: 'tower_purple', name: '高方塊（紫）', w: 1, d: 1, h: 3, color: 0x8e5bd6, rarity: 'SR' },
-  { id: 'plate_gold', name: '金色平台', w: 3, d: 3, h: 0.5, color: 0xf2c84b, rarity: 'SSR' },
+  // 卡扣積木（SPEC-UGC §9.6.1）：color = 塑膠顏色
+  { id: 'cube_white', name: '小積木（白）', w: 1, d: 1, h: 1, color: 0xe8edf2, rarity: 'N', model: 'brick' },
+  { id: 'cube_red', name: '小積木（紅）', w: 1, d: 1, h: 1, color: 0xd9534f, rarity: 'N', model: 'brick' },
+  { id: 'cube_blue', name: '小積木（藍）', w: 1, d: 1, h: 1, color: 0x3d8bd9, rarity: 'N', model: 'brick' },
+  { id: 'bar_yellow', name: '長積木（黃）', w: 2, d: 1, h: 1, color: 0xe6b422, rarity: 'R', model: 'brick' },
+  { id: 'block_green', name: '大積木（綠）', w: 2, d: 2, h: 2, color: 0x4caf6a, rarity: 'R', model: 'brick' },
+  { id: 'tower_purple', name: '高積木（紫）', w: 1, d: 1, h: 3, color: 0x8e5bd6, rarity: 'SR', model: 'brick' },
+  { id: 'plate_gold', name: '金色積木底板', w: 3, d: 3, h: 0.5, color: 0xf2c84b, rarity: 'SSR', model: 'brick' },
   // 花園珍藏：6 件一格、3 件兩格、2 件三格、1 件四格。
   { id: 'pumpkin_lantern', name: '南瓜燈籠怪', w: 1, d: 1, h: 1.15, color: 0xe98827, rarity: 'R', model: 'artisan', description: '藤蔓小怪守著一盞搖曳的萬聖節燈火。' },
   { id: 'victorian_lamp', name: '維多利亞路燈', w: 1, d: 1, h: 2.6, color: 0xe4b965, rarity: 'R', model: 'artisan', description: '鍛鐵花飾、黃銅雕邊與溫暖的六角燈室。' },

@@ -325,22 +325,35 @@ export function evalMoonSwitch(m: MoonSwitchTimeline, t: number): number {
 }
 
 /**
- * 場景限定魚種（fishType → 可出現的場景；沒列出的不限）。假 server 排程、debug 召喚都依此檢查（SPEC §15.4）。
- * 天空 Boss 只在空中(黃昏)；地面 Boss 只在地面場景（含殭屍專案的監獄 / 墓地；原版每隻 Boss 綁自己的 Boss 場景）。
+ * 天空場景只能出現 / 放置這些龍（SPEC §15.4）：蛋蛋龍、翼龍、獵龍騎士、風神翼龍、翔空蒼龍（含翅膀）。
+ * 其他龍只能在地面場景。
  */
-export const FISH_SCENE_LIMIT: Readonly<Partial<Record<number, readonly number[]>>> = {
-  [FishType.Quetzalcoatlus]: [SceneType.Boss_Sky_Dusk],
-  [FishType.AzureDragon]: [SceneType.Boss_Sky_Dusk],
-  [FishType.AzureDragonWing]: [SceneType.Boss_Sky_Dusk],
-  [FishType.TreeGoblin]: GROUND_SCENES,
-  [FishType.TRex]: GROUND_SCENES,
-  [FishType.Scorpion]: GROUND_SCENES,
-};
+export const SKY_FISH_TYPES: readonly number[] = [
+  FishType.Egg_S,
+  FishType.Pterosau,
+  FishType.DragonSlainKnight,
+  FishType.Quetzalcoatlus,
+  FishType.AzureDragon,
+  FishType.AzureDragonWing,
+];
+/** 只能在天空場景的龍（天空 Boss）；蛋蛋龍、翼龍、獵龍騎士地面也可以 */
+const SKY_ONLY_FISH_TYPES: readonly number[] = [FishType.Quetzalcoatlus, FishType.AzureDragon, FishType.AzureDragonWing];
 
+/** 場景限定魚種的規則本體：假 server 排程、debug 召喚、家園放龍都依此檢查 */
 export function isFishAllowedInScene(fishType: number, sceneType: number): boolean {
-  const scenes = FISH_SCENE_LIMIT[fishType];
-  return !scenes || scenes.includes(sceneType);
+  return isSkyScene(sceneType) ? SKY_FISH_TYPES.includes(fishType) : !SKY_ONLY_FISH_TYPES.includes(fishType);
 }
+
+/** 場景限定魚種（fishType → 可出現的場景；沒列出的 = 任何場景都可以），由 isFishAllowedInScene 推得，給顯示用 */
+export const FISH_SCENE_LIMIT: Readonly<Partial<Record<number, readonly number[]>>> = (() => {
+  const all = Object.values(SCENE_DEFINES).map((d) => d.type);
+  const out: Partial<Record<number, readonly number[]>> = {};
+  for (const t of Object.values(FishType)) {
+    const scenes = all.filter((s) => isFishAllowedInScene(t, s));
+    if (scenes.length < all.length) out[t] = scenes;
+  }
+  return out;
+})();
 
 /** 群組內所有魚種都允許才可出現 */
 export function isGroupAllowedInScene(fishTypes: Iterable<number>, sceneType: number): boolean {

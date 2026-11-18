@@ -82,10 +82,10 @@ UGC 家園（`src/features/ugc/` + `src/server-fake/ugc/` + `src/game/ugc/`）�
 
 ## 加新裝飾物
 
-目前的裝飾物都是佔位方塊（SPEC-UGC §9.6）。要加正式的：
+目前有 7 件卡扣積木（`model: 'brick'`，`BrickDeco.ts`，SPEC-UGC §9.6.1）和 12 件花園珍藏（`model: 'artisan'`，`ArtisanDeco.ts`，§9.7）。要加新的：
 
-1. `src/game/ugc/DecoDefine.ts` 的 `DECO_DEFINES` 加一筆：`id`、名稱、佔地 `w × d`（格）、高 `h`、稀有度、`color`（沒有外觀時的方塊顏色）。
-   抽卡池、魚卡面板、裝潢物品列、擺放驗證都會自動包含它。
-2. 用 `registerDecoBuilder(id, (def, rot, opts) => THREE.Object3D)`（`src/features/ugc/decor/DecoFactory.ts`）註冊 3D 外觀：
+1. `src/game/ugc/DecoDefine.ts` 的 `DECO_DEFINES` 加一筆：`id`、名稱、佔地 `w × d`（格）、高 `h`、稀有度、`color`（積木的塑膠顏色 / 沒有外觀時的方塊顏色）。
+   抽卡池、魚卡面板、裝潢物品列、擺放驗證都會自動包含它。想要積木造型就填 `model: 'brick'`（凸點、層數依佔地與高度自動產生）。
+2. 其他造型用 `registerDecoBuilder(id, (def, rot, opts) => THREE.Object3D)`（`src/features/ugc/decor/DecoFactory.ts`）註冊 3D 外觀：
    物件原點 = 佔地中心、貼地、+Z 朝上，一格 = 10 世界單位；`opts.ghost` = 半透明預覽，`opts.editing` = 裝潢模式中。
-   沒註冊的物品會畫成方塊。
+   沒有 model 也沒註冊的物品會畫成單色方塊。

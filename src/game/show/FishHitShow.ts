@@ -32,8 +32,10 @@ export class FishHitShow {
     const dur = isMain ? 0.7 : 0.3;
     const amp = fish.define.common.hitShake === HitShakeType.Small ? 0.03 : 0.04;
     const s = fish.sprite;
-    const base = s.scale.clone();
+    // 脈動以 sprite 原尺寸為基準：連續雷擊會打斷上一輪脈動，若取「當下尺寸」當基準會停在 ±4% 再疊下去，越打越縮 / 越大
+    const base = fish.spriteHomeScale;
     this.actions.stopByTag(fish, TAG_LIGHTNING);
+    s.scale.copy(base);
     const steps = 6;
     const ramp = [];
     for (let i = 1; i <= steps; i++) {

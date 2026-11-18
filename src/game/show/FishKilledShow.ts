@@ -16,6 +16,8 @@ export class FishKilledShow {
     fish.dying = true;
     fish.hittable = false;
     this.actions.stopAll(fish);
+    // 受擊晃動 / 雷擊脈動被中途停掉 → sprite 回原位、原尺寸，死亡表演的放大才不會疊在偏掉的尺寸上
+    fish.resetPose();
     fish.bleachRate = 0;
     fish.alpha = 1;
     fish.playRunAnimation(2);

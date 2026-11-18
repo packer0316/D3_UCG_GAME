@@ -3,15 +3,27 @@
  * 魚卡區上方「一鍵升級」（§7.1）：確認框列出每張卡的升級與總花費，確定後一次送出。
  */
 import type { GameContext } from '@game/GameContext';
-import { CARD_FISH_TYPES, FISH_RARITY, RARITY_NAME, SCENE_RARITY, isBossCard } from '@game/ugc/CardDefine';
-import { checkLevelUp, commissionRate, levelMultiplier, levelUpCost, planLevelUpAll, ticketLevelFactor } from '@game/ugc/CultivateRule';
+import { CARD_FISH_TYPES, CARD_ORIGINAL_ODDS, FISH_RARITY, RARITY_NAME, SCENE_RARITY, isBossCard } from '@game/ugc/CardDefine';
+import {
+  MULT_MAX,
+  MULT_MIN,
+  checkLevelUp,
+  commissionRate,
+  fishMultiplier,
+  hasFixedOdds,
+  levelMultiplier,
+  levelUpCost,
+  nextBreakthrough,
+  planLevelUpAll,
+  ticketLevelFactor,
+} from '@game/ugc/CultivateRule';
 import { DECO_DEFINES } from '@game/ugc/DecoDefine';
 import { MAX_LEVEL } from '@game/ugc/UgcDefine';
 import type { LevelUpAllPlan } from '@game/ugc/UgcTypes';
 import { FISH_SCENE_LIMIT, isSkyScene } from '@game/define/SceneDefine';
 import type { UgcClient } from '../UgcClient';
 import { Panel } from './Panel';
-import { clear, el, fishName, fmt, fmtMult, fmtPct, rarityTag } from './dom';
+import { clear, el, fishName, fmt, fmtMult, fmtOdds, fmtPct, rarityTag } from './dom';
 import { createSummonCard } from './SummonCard';
 
 export class CardPanel {
@@ -117,16 +129,29 @@ export class CardPanel {
     const next = level < MAX_LEVEL ? level + 1 : null;
     const row = (label: string, now: string, after: string | null) =>
       el('div', 'ugc-kv', el('span', 'ugc-kv-k', label), el('span', 'ugc-kv-v', now), after !== null && el('span', 'ugc-kv-next', `→ ${after}`));
+    // 倍率 / 賠率（SPEC-UGC §7）：原倍率 < 10 固定；賠率 = 說明頁原倍率 × 倍率
+    const fixed = hasFixedOdds(t);
+    const orig = CARD_ORIGINAL_ODDS[t];
+    const odds = (lv: number) => `${fmtOdds(orig!.odds * fishMultiplier(t, lv))} 倍`;
     this.detail.append(
       el(
         'div',
         'ugc-kv-list',
-        row('等級', `Lv.${level}`, next ? `Lv.${next}` : null),
-        row('倍率', fmtMult(levelMultiplier(level)), next ? fmtMult(levelMultiplier(next)) : null),
-        row('屋主抽成', fmtPct(commissionRate(level)), next ? fmtPct(commissionRate(next)) : null),
-        row('訪客掉券', fmtMult(ticketLevelFactor(level)), next ? fmtMult(ticketLevelFactor(next)) : null),
+        row('等級', `Lv.${level} / ${MAX_LEVEL}`, next ? `Lv.${next}` : null),
+        fixed
+          ? row('倍率', '×1（固定）', null)
+          : row('倍率', fmtMult(levelMultiplier(level), 3), next ? fmtMult(levelMultiplier(next), 3) : null),
+        orig && row(orig.max ? '最高賠率' : '賠率', odds(level), next && !fixed ? odds(next) : null),
+        row('屋主抽成', fmtPct(commissionRate(level), 2), next ? fmtPct(commissionRate(next), 2) : null),
+        row('訪客掉券', fmtMult(ticketLevelFactor(level), 3), next ? fmtMult(ticketLevelFactor(next), 3) : null),
       ),
-      el('div', 'ugc-detail-desc', '倍率越高，中獎金額越高，也越難被打死。等級只在放進家園時生效。'),
+      el(
+        'div',
+        'ugc-detail-desc',
+        fixed
+          ? `原倍率 ${orig!.odds} 倍（低於 10 倍），倍率固定；升級提高抽成、掉券與人氣。等級只在放進家園時生效。`
+          : `家園的倍率 = 原倍率的 ${fmtMult(MULT_MIN, 1)} ~ ${fmtMult(MULT_MAX, 1)}（公有地 ×1）。倍率越高，中獎金額越高，也越難被打死。等級只在放進家園時生效。`,
+      ),
     );
 
     const cost = levelUpCost(rarity, level);
@@ -144,11 +169,16 @@ export class CardPanel {
       // 成功後 server 會送新的資產 → ugc:profile 重畫；失敗才需要自己恢復按鈕
       if (!r.ok) btn.disabled = false;
     });
+    // 突破級要碎片；其他等級只要金幣，提示下次突破
+    const nb = cost.copies ? null : nextBreakthrough(rarity, level);
+    const copiesItem = cost.copies
+      ? el('div', `ugc-cost-item${card.copies < cost.copies ? ' lack' : ''}`, el('span', '', '突破碎片'), el('b', '', `${card.copies} / ${cost.copies}`))
+      : el('div', 'ugc-cost-item', el('span', '', `碎片 ${card.copies}`), el('b', '', nb ? `Lv.${nb.level} 突破需 ${nb.copies}` : '不需要'));
     this.detail.append(
       el(
         'div',
         'ugc-cost',
-        el('div', `ugc-cost-item${card.copies < cost.copies ? ' lack' : ''}`, el('span', '', '碎片'), el('b', '', `${card.copies} / ${cost.copies}`)),
+        copiesItem,
         el('div', `ugc-cost-item${p.money < cost.gold ? ' lack' : ''}`, el('span', '', '金幣'), el('b', '', fmt(cost.gold))),
       ),
       btn,
