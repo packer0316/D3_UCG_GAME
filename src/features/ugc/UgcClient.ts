@@ -10,7 +10,7 @@ import { Tokens } from '@game/Tokens';
 import type { ServerToClient } from '@net/protocol';
 import { MY_HOME_ROOM_ID } from '@game/ugc/UgcDefine';
 import type { UgcAck } from '@game/ugc/UgcProtocol';
-import type { DecoPlacement, HomeIncome, HomeSlot, PlayerProfile, RoomDetail, RoomState } from '@game/ugc/UgcTypes';
+import type { DecoPlacement, HomeIncome, HomeSlot, PlayerProfile, RoomState } from '@game/ugc/UgcTypes';
 
 export class UgcClient {
   profile: PlayerProfile | null = null;
@@ -90,9 +90,10 @@ export class UgcClient {
     }
   }
 
-  async listRooms(): Promise<{ rooms: RoomDetail[]; currentRoomId: number }> {
+  /** 房間列表 + 家園排行（SPEC-UGC §2.4） */
+  async listRooms(): Promise<ServerToClient['G2U_ROOM_LIST_ACK']> {
     const r = await this.ask(() => this.ctx.net.send('U2G_ROOM_LIST_REQ', {}), 'G2U_ROOM_LIST_ACK');
-    return r ?? { rooms: [], currentRoomId: this.room?.roomId ?? 0 };
+    return r ?? { rooms: [], currentRoomId: this.room?.roomId ?? 0, hot: [], rising: [], now: Date.now() };
   }
 
   /** 換房；成功後會收到新的房間資料（room:ready） */

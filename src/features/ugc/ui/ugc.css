@@ -514,13 +514,47 @@
   gap: 6px;
   padding-right: 4px;
 }
+/* 房間列表分上下兩半（SPEC-UGC §2.4）：熱門 / 新星各自捲動，新星永遠看得到 */
+.ugc-room-list.split {
+  overflow: hidden;
+  padding-right: 0;
+}
+.ugc-room-halves {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ugc-room-half {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* 新星（下半）：內容少就只佔需要的高度，剩下的給熱門；最多一半，玩家多時兩邊各半 */
+.ugc-room-half.rising {
+  flex: 0 1 auto;
+  max-height: 50%;
+}
+.ugc-room-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 4px;
+}
+/* 一位玩家一行（約 30px）：名次 ｜ 名稱 ｜ 小字 ｜ 人氣，盡量多顯示幾位玩家 */
 .ugc-room-row {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: 8px;
+  gap: 7px;
+  padding: 3px 8px 3px 5px;
+  border-radius: 6px;
   border: 1px solid var(--ugc-line);
   background: rgba(8, 18, 38, 0.6);
   font: inherit;
@@ -535,51 +569,101 @@
   border-color: var(--ugc-gold);
   background: rgba(60, 96, 156, 0.6);
 }
-.ugc-room-row.mine .ugc-room-no {
-  background: linear-gradient(#f3b530, #c97a12);
+/* 我的家園：左邊金色邊條（金色圓圈留給第一名，SPEC-UGC §2.4） */
+.ugc-room-row.mine {
+  box-shadow: inset 3px 0 0 var(--ugc-gold);
 }
 .ugc-room-no {
   flex: none;
-  width: 36px;
-  height: 36px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: linear-gradient(#1f6fd1, #0f3f8c);
-  font: 800 17px/36px Consolas, monospace;
+  font: 800 12px/22px Consolas, monospace;
   text-align: center;
 }
-.ugc-room-info {
-  flex: 1;
-  min-width: 0;
+/* 名次：前三名金 / 銀 / 銅；公有地固定置頂 */
+.ugc-room-no.rank-1 {
+  background: linear-gradient(#f6c94a, #c98a12);
+  color: #2a1a00;
+}
+.ugc-room-no.rank-2 {
+  background: linear-gradient(#e3e8ef, #9aa6b4);
+  color: #1b2430;
+}
+.ugc-room-no.rank-3 {
+  background: linear-gradient(#e0a173, #9c5a2c);
+  color: #2a1406;
+}
+.ugc-room-no.public {
+  background: linear-gradient(#2fa38a, #116b58);
+  font-size: 11px;
+}
+.ugc-room-section {
+  flex: none;
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: baseline;
+  gap: 8px;
+  margin: 4px 2px 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ugc-gold);
+}
+.ugc-room-section small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ugc-muted);
+}
+.ugc-room-empty {
+  flex: none;
+  padding: 10px;
+  border: 1px dashed var(--ugc-line);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--ugc-muted);
+  text-align: center;
 }
 .ugc-room-title {
-  font-size: 15px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ugc-room-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.ugc-room-tags span {
-  padding: 0 5px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
+/* 小字：最高等級（開張天數綠色） */
+.ugc-room-meta {
+  flex: none;
   font-size: 11px;
+  line-height: 1.2;
   color: var(--ugc-muted);
+  white-space: nowrap;
+}
+.ugc-room-meta b {
+  margin-right: 4px;
+  font-weight: 700;
+}
+.ugc-room-meta .meta-new {
+  color: #9be3ae;
+}
+/* 人氣：右側數字（排名依據；區段標題寫「依人氣」） */
+.ugc-room-pop {
+  flex: none;
+  min-width: 30px;
+  font: 800 13px/1.2 Consolas, monospace;
+  color: #ffd166;
+  text-align: right;
 }
 .ugc-room-here {
   flex: none;
-  padding: 1px 6px;
+  padding: 0 4px;
   border-radius: 4px;
   background: #2e7d32;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
+  line-height: 1.5;
 }
 .ugc-room-detail {
   display: flex;

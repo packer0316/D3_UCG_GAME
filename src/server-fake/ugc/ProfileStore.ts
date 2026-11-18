@@ -65,6 +65,7 @@ export function createInitialProfile(now: number): PlayerProfile {
     decos: { ...STARTER_DECOS },
     home: createDefaultHome(now),
     stats: { draws: 0, ticketsEarned: 0 },
+    createdAt: now,
   };
 }
 
@@ -84,6 +85,8 @@ export function sanitizeProfile(raw: unknown, now: number): PlayerProfile | null
     name: typeof r.name === 'string' && r.name ? r.name.slice(0, 16) : init.name,
     money: Math.floor(num(r.money, init.money)),
     tickets: Math.floor(num(r.tickets, init.tickets)),
+    // 舊存檔沒有開張時間 → 當作現在建立（新玩家，SPEC-UGC §2.4）；未來時間夾回現在
+    createdAt: Math.min(now, num(r.createdAt, now)),
   };
   // 魚卡：初始 11 種一定有
   if (r.fish && typeof r.fish === 'object') {

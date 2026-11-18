@@ -50,3 +50,8 @@ export const INCOME_NOTIFY_INTERVAL_MS = 5000;
 /** 人氣：場景種類每種加幾分、裝飾物最多算幾個 */
 export const POPULARITY_PER_SCENE = 5;
 export const POPULARITY_DECO_CAP = 30;
+
+// ---- 房間列表排行（SPEC-UGC §2.4）
+export const DAY_MS = 24 * 60 * 60 * 1000;
+/** 開張幾天內算「新星家園」 */
+export const NEW_HOME_DAYS = 3;

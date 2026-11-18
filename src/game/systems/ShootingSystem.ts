@@ -43,6 +43,9 @@ const NORMAL_BULLET_HITS_FLYING = true;
 
 const toId = (f: Fish): ScriptIdData => ({ groupIndex: f.groupIndex, fishIndex: f.fishIndex });
 
+/** 觀看模式點場地的提示，最短間隔（秒） */
+const OBSERVER_HINT_INTERVAL = 3;
+
 export class ShootingSystem implements BulletHost {
   private cannons = new Map<number, Cannon>();
   private normals: NormalBullet[] = [];
@@ -62,6 +65,8 @@ export class ShootingSystem implements BulletHost {
   private auto = false;
   /** 一般模式下點到魚：按住期間以鎖定彈射擊該魚（放開解除） */
   private clickLock = false;
+  /** 觀看模式提示：下一次可以提示的時間 */
+  private observerHintAt = 0;
   /** 子彈牆（跟相機設定走） */
   private readonly playField: PlayField;
 
@@ -229,6 +234,14 @@ export class ShootingSystem implements BulletHost {
 
   private onPointerDown(p: PointerInfo): boolean {
     if (p.button !== 0) return false;
+    // 觀看模式（自己的家園）：不開砲、不鎖定，提示一下（最多每 3 秒一次）
+    if (this.seatSystem.isObserver) {
+      if (this.time >= this.observerHintAt) {
+        this.observerHintAt = this.time + OBSERVER_HINT_INTERVAL;
+        this.ctx.events.emit('shoot:reject', { reason: 'observer' });
+      }
+      return false;
+    }
     this.releaseAt = -1;
     const fish = this.lock.pickAt(p.x, p.y);
     if (this.special.isLockFish) {

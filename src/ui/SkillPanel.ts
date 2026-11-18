@@ -81,6 +81,10 @@ export class SkillPanel {
     this.shootCount = this.buttons.find((b) => b.def.id === 'AIAuto')?.view.children.find((c) => c.data.name === 'ShootCount');
     this.ctx.events.on('skill:change', () => this.refresh());
     this.ctx.events.on('seat:bet', () => this.refresh());
+    // 觀看模式（自己的家園，SPEC-UGC §2.5）：沒有座位 → 技能 / 自動按鈕整組隱藏
+    this.ctx.events.on('room:ready', ({ yourSeat }) => {
+      if (this.inst) this.inst.root.visible = yourSeat >= 0;
+    });
     // 自動按鈕上的剩餘子彈數（SkillButtonBase：≤ 0 隱藏）
     this.ctx.events.on('ai:change', ({ active, shotsLeft }) => {
       if (!this.shootCount) return;
@@ -89,7 +93,7 @@ export class SkillPanel {
     });
     window.addEventListener('keydown', (e) => {
       const t = e.target as HTMLElement | null;
-      if (e.code !== 'Space' || e.repeat || t?.tagName === 'INPUT') return;
+      if (e.code !== 'Space' || e.repeat || t?.tagName === 'INPUT' || !this.visible) return;
       e.preventDefault();
       this.click('AIAuto');
     });
@@ -133,7 +137,13 @@ export class SkillPanel {
     }
   }
 
+  /** 隱藏時（觀看模式）不吃點擊、不吃空白鍵 */
+  private get visible(): boolean {
+    return !!this.inst?.root.visible;
+  }
+
   private hitButton(x: number, y: number): ButtonView | null {
+    if (!this.visible) return null;
     for (const b of this.buttons) if (b.view.hitTest(x, y)) return b;
     return null;
   }

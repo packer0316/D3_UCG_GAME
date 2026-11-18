@@ -5,8 +5,8 @@
 import '@game/ugc/UgcProtocol';
 import { SCENE_LIST, isFishAllowedInScene } from '@game/define/SceneDefine';
 import { CARD_FISH_TYPES } from '@game/ugc/CardDefine';
-import { homePopularity, visitorCount } from '@game/ugc/HomeRule';
-import { MY_HOME_ROOM_ID, PUBLIC_ROOM_ID, SLOT_SECONDS, SYSTEM_ACCOUNT_ID } from '@game/ugc/UgcDefine';
+import { homePopularity, rankHomes, visitorCount } from '@game/ugc/HomeRule';
+import { DAY_MS, MY_HOME_ROOM_ID, PUBLIC_ROOM_ID, SLOT_SECONDS, SYSTEM_ACCOUNT_ID } from '@game/ugc/UgcDefine';
 import type { DecoPlacement, HomeSlot, RoomDetail } from '@game/ugc/UgcTypes';
 import type { FakeServer, FakeServerModule } from '../FakeServer';
 import { NPC_HOMES } from './npcHomes';
@@ -21,7 +21,10 @@ export class WorldModule implements FakeServerModule {
   install(server: FakeServer): void {
     this.server = server;
     server.on('U2G_ROOM_LIST_REQ', () => {
-      server.send('G2U_ROOM_LIST_ACK', { rooms: this.listRooms(), currentRoomId: server.room.current.roomId });
+      const rooms = this.listRooms();
+      const now = server.wallClock();
+      // 家園排行（SPEC-UGC §2.4）：熱門 = 全部依人氣；新星 = 開張 3 天內依人氣
+      server.send('G2U_ROOM_LIST_ACK', { rooms, currentRoomId: server.room.current.roomId, ...rankHomes(rooms, now), now });
     });
     server.on('U2G_ENTER_ROOM_REQ', ({ roomId }) => {
       const room = this.getRoom(roomId);
@@ -49,7 +52,8 @@ export class WorldModule implements FakeServerModule {
     if (roomId === MY_HOME_ROOM_ID) return this.myHome();
     const npc = NPC_HOMES.find((h) => h.roomId === roomId);
     if (!npc) return null;
-    return this.homeDetail(npc.roomId, npc.accountId, npc.name, false, npc.slots, npc.levels, npc.deco);
+    const createdAt = this.server.wallClock() - npc.daysAgo * DAY_MS;
+    return { ...this.homeDetail(npc.roomId, npc.accountId, npc.name, false, npc.slots, npc.levels, npc.deco, createdAt), host: { ...npc.host } };
   }
 
   /** 公有地：所有場景輪流，每個場景放所有（該場景允許的）魚種 */
@@ -67,6 +71,7 @@ export class WorldModule implements FakeServerModule {
       popularity: 0,
       visitors: 0,
       slotSeconds: SLOT_SECONDS,
+      createdAt: 0,
     };
   }
 
@@ -74,7 +79,7 @@ export class WorldModule implements FakeServerModule {
     const p = this.server.profile.profile;
     const levels: Record<number, number> = {};
     for (const [t, card] of Object.entries(p.fish)) levels[Number(t)] = card.level;
-    return this.homeDetail(MY_HOME_ROOM_ID, p.accountId, p.name, true, p.home.slots, levels, p.home.deco);
+    return this.homeDetail(MY_HOME_ROOM_ID, p.accountId, p.name, true, p.home.slots, levels, p.home.deco, p.createdAt);
   }
 
   private homeDetail(
@@ -85,6 +90,7 @@ export class WorldModule implements FakeServerModule {
     slots: readonly HomeSlot[],
     levels: Readonly<Record<number, number>>,
     deco: readonly DecoPlacement[],
+    createdAt: number,
   ): RoomDetail {
     const popularity = homePopularity(slots, deco.length, (t) => levels[t] ?? 1);
     return {
@@ -100,6 +106,7 @@ export class WorldModule implements FakeServerModule {
       popularity,
       visitors: Math.round(visitorCount(popularity) * 10) / 10,
       slotSeconds: SLOT_SECONDS,
+      createdAt,
     };
   }
 }

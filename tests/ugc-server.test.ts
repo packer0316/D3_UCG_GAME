@@ -134,18 +134,47 @@ describe('房間', () => {
     expect(h.last('G2U_SYNC_SCRIPT_ACK')!.list.length).toBeGreaterThan(0);
   });
 
-  it('房間列表：1 公有地、2 我的家園、3–10 NPC 家園', () => {
+  it('房間列表：1 公有地、2 我的家園、3–34 NPC 家園與屋主介紹', () => {
     const h = boot();
     login(h);
     h.req('U2G_ROOM_LIST_REQ', {});
     const { rooms, currentRoomId } = h.last('G2U_ROOM_LIST_ACK')!;
     expect(currentRoomId).toBe(1);
-    expect(rooms.map((r) => r.roomId)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(rooms.map((r) => r.roomId)).toEqual(Array.from({ length: 34 }, (_, i) => i + 1));
+    for (const npc of NPC_HOMES) expect(rooms.find(r => r.roomId === npc.roomId)?.host).toEqual(npc.host);
     expect(rooms[1]).toMatchObject({ kind: 'home', isMine: true, name: '2號房 我的家園' });
     expect(rooms[1].slots).toEqual([{ sceneType: Forest, fishTypes: [...STARTER_FISH] }]);
-    expect(rooms[2]).toMatchObject({ kind: 'home', isMine: false, ownerName: '阿明', name: '3號房 阿明的家園' });
+    expect(rooms[2]).toMatchObject({ kind: 'home', isMine: false, ownerName: '阿哲', name: '3號房 阿哲的家園' });
     // 進度越後面人氣越高
     expect(rooms[9].popularity).toBeGreaterThan(rooms[2].popularity);
+  });
+
+  it('房間列表排行：熱門 = 全部家園依人氣；新星 = 3 天內開張依人氣（§2.4）', () => {
+    const wall = 1_000_000_000_000;
+    const ack = (profile?: (p: PlayerProfile) => void) => {
+      const h = boot({ wall, profile });
+      login(h);
+      h.req('U2G_ROOM_LIST_REQ', {});
+      return h.last('G2U_ROOM_LIST_ACK')!;
+    };
+    // 新玩家：存檔剛建立 → 我的家園也是新星
+    const fresh = ack();
+    expect(fresh.now).toBe(wall);
+    const homes = fresh.rooms.filter((r) => r.kind === 'home');
+    expect(fresh.hot).toHaveLength(homes.length);
+    expect(fresh.hot).not.toContain(PUBLIC_ROOM_ID);
+    const pop = (id: number) => fresh.rooms.find((r) => r.roomId === id)!.popularity;
+    for (let i = 1; i < fresh.hot.length; i++) expect(pop(fresh.hot[i - 1])).toBeGreaterThanOrEqual(pop(fresh.hot[i]));
+    // 新星：原本 3 位、新增的 10 位新屋主，以及自己的家園。
+    expect(new Set(fresh.rising)).toEqual(new Set([2, 3, 4, 6, 11, 13, 14, 18, 20, 22, 24, 27, 31, 34]));
+    for (let i = 1; i < fresh.rising.length; i++) expect(pop(fresh.rising[i - 1])).toBeGreaterThanOrEqual(pop(fresh.rising[i]));
+    expect(fresh.rooms.find((r) => r.roomId === 3)!.createdAt).toBe(wall - 0.3 * 86_400_000);
+    expect(fresh.rooms.find((r) => r.roomId === PUBLIC_ROOM_ID)!.createdAt).toBe(0);
+
+    // 老玩家（10 天前建立）：不在新星
+    const old = ack((p) => (p.createdAt = wall - 10 * 86_400_000));
+    expect(old.rising).not.toContain(MY_HOME_ROOM_ID);
+    expect(old.hot).toContain(MY_HOME_ROOM_ID);
   });
 
   it('換房：飛行中的子彈退款、清掉群組、送新房間資料；不存在的房間失敗', () => {
@@ -157,7 +186,7 @@ describe('房間', () => {
     h.req('U2G_ENTER_ROOM_REQ', { roomId: 3 });
     expect(h.take('G2U_ENTER_ROOM_ACK')).toEqual([{ ok: true, roomId: 3 }]);
     expect(h.profile.money).toBe(INITIAL_MONEY);
-    expect(h.last('G2U_ROOM_DATA_NOTIFY')).toMatchObject({ roomName: '3號房 阿明的家園', sceneType: Forest });
+    expect(h.last('G2U_ROOM_DATA_NOTIFY')).toMatchObject({ roomName: '3號房 阿哲的家園', sceneType: Forest });
     expect(h.last('G2U_ROOM_DATA_NOTIFY')!.seats[0]!.money).toBe(INITIAL_MONEY);
     expect(h.server.script.activeGroups.size).toBe(0);
     h.req('U2G_SYNC_SCRIPT_REQ', {});
@@ -215,7 +244,7 @@ describe('允許魚種（家園只出屋主放的龍）', () => {
   it('家園的 Boss 出場頻率較高：放了 Boss 的場景格 60 秒內會出 Boss', () => {
     const h = boot({ wall: 0 });
     login(h);
-    const warden = NPC_HOMES.find((n) => n.name === '典獄長')!;
+    const warden = NPC_HOMES.find((n) => n.roomId === 9)!;
     enter(h, warden.roomId);
     h.advance(60_000, 500);
     const kinds = [...h.server.script.activeGroups.values()].map((g) => g.kind);
@@ -252,7 +281,7 @@ describe('場景輪替', () => {
   it('相鄰兩格同一個場景：不轉場，只換放出的魚；只有一格不輪替', () => {
     const h = boot({ wall: 0 });
     login(h);
-    const eggs = NPC_HOMES.find((n) => n.name === '蛋蛋收藏家')!;
+    const eggs = NPC_HOMES.find((n) => n.roomId === 5)!;
     enter(h, eggs.roomId);
     expect(h.server.room.slotIndex).toBe(0);
     h.sent.length = 0;
@@ -285,16 +314,12 @@ describe('場景輪替', () => {
 
 describe('倍率 / 抽成 / 掉券', () => {
   it('家園：魚卡等級 → 賠率倍率（原倍率 ×0.4 ~ ×1.4；原倍率 < 10 固定）', () => {
-    // 翼龍（100 倍）Lv.100、黃金劍龍（60 倍）Lv.1、幼幼龍（2 倍）Lv.100
-    const h = boot({
-      wall: 0,
-      profile: (p) => {
-        p.fish[11].level = 100;
-        p.fish[1].level = 100;
-      },
-    });
+    // 龍王（10 號房）：翼龍（100 倍）Lv.70、黃金劍龍（60 倍）Lv.60、幼幼龍（2 倍）Lv.70
+    const king = NPC_HOMES.find((n) => n.roomId === 10)!;
+    expect([king.levels[11], king.levels[10], king.levels[1]]).toEqual([70, 60, 70]);
+    const h = boot({ wall: 0 });
     login(h);
-    enter(h, MY_HOME_ROOM_ID);
+    enter(h, king.roomId);
     h.server.rtp.cheatMode = true;
     const kill = (fishType: number) => {
       for (let i = 0; i < 300; i++) {
@@ -305,20 +330,33 @@ describe('倍率 / 抽成 / 掉券', () => {
       throw new Error(`fish ${fishType} never spawned`);
     };
     const ptero = kill(11);
-    expect(ptero.floatedOdds).toBeCloseTo(100 * levelMultiplier(100));
-    expect(ptero.money).toBe(500 * 140);
+    expect(ptero.floatedOdds).toBeCloseTo(100 * levelMultiplier(70));
+    expect(ptero.money).toBe(Math.round(500 * 100 * levelMultiplier(70)));
     const steg = kill(10);
-    expect(steg.floatedOdds).toBeCloseTo(60 * 0.4);
-    expect(steg.money).toBe(500 * 24);
+    expect(steg.floatedOdds).toBeCloseTo(60 * levelMultiplier(60));
     const cub = kill(1);
     expect(cub.floatedOdds).toBe(2);
     expect(cub.money).toBe(500 * 2);
+
+    // 自己的家園（觀看模式不能打）：倍率一樣看魚卡等級
+    const mine = boot({
+      wall: 0,
+      profile: (p) => {
+        p.fish[11].level = 100;
+        p.fish[1].level = 100;
+      },
+    });
+    login(mine);
+    enter(mine, MY_HOME_ROOM_ID);
+    expect(mine.server.room.fishMultiplier(11)).toBeCloseTo(1.4);
+    expect(mine.server.room.fishMultiplier(10)).toBeCloseTo(0.4);
+    expect(mine.server.room.fishMultiplier(1)).toBe(1);
   });
 
   it('蛋蛋收藏家 Lv.100：倍率固定（原倍率 < 10），抽成 30%', () => {
     const h = boot({ wall: 0 });
     login(h);
-    enter(h, NPC_HOMES.find((n) => n.name === '蛋蛋收藏家')!.roomId);
+    enter(h, 5);
     h.server.rtp.cheatMode = true;
     const cub = liveFish(h).find((f) => f.fishType === 1)!;
     expect(cub).toBeDefined();
@@ -339,7 +377,7 @@ describe('倍率 / 抽成 / 掉券', () => {
     expect(kill.money).toBe(100 * odds);
   });
 
-  it('別人的家園：命中的子彈抽成給屋主，RTP = 目標 − 抽成率；自己的家園 / 公有地沒有抽成', () => {
+  it('別人的家園：命中的子彈抽成給屋主，RTP = 目標 − 抽成率；公有地沒有抽成', () => {
     const rtpIn = (roomId: number) => {
       const h = boot({ wall: 0, seed: 3 });
       login(h);
@@ -366,11 +404,42 @@ describe('倍率 / 抽成 / 掉券', () => {
     expect(npc.rtp).toBeGreaterThan(1.05 - 0.06);
     expect(npc.rtp).toBeLessThan(1.05 + 0.06);
 
-    const mine = rtpIn(MY_HOME_ROOM_ID);
-    expect(mine.h.server.room.visitCommission).toBe(0);
-    expect(mine.h.last('G2U_VISIT_COMMISSION_NOTIFY')).toBeUndefined();
-    expect(mine.rtp).toBeGreaterThan(1.1 - 0.06);
-    expect(mine.rtp).toBeLessThan(1.1 + 0.06);
+    const pub = rtpIn(PUBLIC_ROOM_ID);
+    expect(pub.h.server.room.visitCommission).toBe(0);
+    expect(pub.h.last('G2U_VISIT_COMMISSION_NOTIFY')).toBeUndefined();
+    expect(pub.rtp).toBeGreaterThan(1.1 - 0.06);
+    expect(pub.rtp).toBeLessThan(1.1 + 0.06);
+  });
+
+  it('自己的家園 = 觀看模式：不坐座位（yourseat -1、座位全空）、開砲一律拒絕；離開後回到座位 0（§2.5）', () => {
+    const h = boot({ wall: 0 });
+    login(h);
+    h.sent.length = 0;
+    enter(h, MY_HOME_ROOM_ID);
+    const data = h.last('G2U_ROOM_DATA_NOTIFY')!;
+    expect(data.yourseat).toBe(-1);
+    expect(data.seats.every((s) => s === null)).toBe(true);
+    expect(h.server.room.seated).toBe(false);
+    // 房間資料沒有我的座位 → 緊接著補送餘額
+    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: -1, seatMoney: INITIAL_MONEY });
+
+    const f = liveFish(h)[0];
+    expect(f).toBeDefined();
+    h.req('U2G_SHOOT_REQ', { bulletId: 8001, bulletType: 0, bet: 500, angle: 0, scriptIdDataVec: [] });
+    expect(h.last('G2U_SHOOT_REJECT')).toEqual({ bulletId: 8001, reason: 'observer', seatMoney: INITIAL_MONEY });
+    h.req('U2G_HIT_REQ', { bulletId: 8001, scriptIdDataVec: [f.id] });
+    expect(h.take('G2U_KILL_FLOATODDS_FISH_NOTIFY')).toEqual([]);
+    expect(h.profile.money).toBe(INITIAL_MONEY);
+
+    // 觀看中金幣變動：SEAT_MONEY_NOTIFY 的 seat = -1
+    h.req('U2G_CARD_LEVELUP_REQ', { fishType: 1 });
+    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: -1, seatMoney: INITIAL_MONEY - 2_000 });
+
+    // 離開家園 → 回到座位 0，餘額照舊
+    enter(h, 3);
+    const back = h.last('G2U_ROOM_DATA_NOTIFY')!;
+    expect(back.yourseat).toBe(0);
+    expect(back.seats[0]).toMatchObject({ money: INITIAL_MONEY - 2_000 });
   });
 
   it('掉券：打死怪物 10% 掉 1 張；公有地 / 別人的家園會掉，自己的家園不掉；通知排在擊殺通知之前', () => {
@@ -450,7 +519,8 @@ describe('抽卡 / 培養', () => {
     expect(h.last('G2U_CARD_LEVELUP_ACK')).toEqual({ ok: true, fishType: 9, level: 2 });
     expect(h.profile.fish[9]).toEqual({ level: 2, copies: 5 });
     expect(h.profile.money).toBe(INITIAL_MONEY - 2_000);
-    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: 0, seatMoney: INITIAL_MONEY - 2_000 });
+    // 在自己的家園是觀看模式：座位 = -1（§2.5）
+    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: -1, seatMoney: INITIAL_MONEY - 2_000 });
     expect(h.last('G2U_ROOM_INFO_NOTIFY')!.room.levels[9]).toBe(2);
     expect(h.server.room.fishLevel(9)).toBe(2);
     expect(h.server.room.fishMultiplier(9)).toBeCloseTo(levelMultiplier(2));
@@ -484,7 +554,7 @@ describe('抽卡 / 培養', () => {
     ]);
     expect(h.profile.fish[1]).toEqual({ level: 14, copies: 2 });
     expect(h.profile.money).toBe(INITIAL_MONEY - 92_000);
-    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: 0, seatMoney: INITIAL_MONEY - 92_000 });
+    expect(h.last('G2U_SEAT_MONEY_NOTIFY')).toEqual({ seat: -1, seatMoney: INITIAL_MONEY - 92_000 });
     expect(h.last('G2U_ROOM_INFO_NOTIFY')!.room.levels[1]).toBe(14);
     expect(h.last('G2U_PROFILE_NOTIFY')!.profile.fish[1]).toEqual({ level: 14, copies: 2 });
 
@@ -595,8 +665,9 @@ describe('裝潢', () => {
     expect(h.server.script.activeGroups.size).toBe(0);
     h.advance(30_000, 500);
     expect(h.server.script.activeGroups.size).toBe(0);
+    // 自己的家園本來就是觀看模式（§2.5），裝潢中一樣不能開砲
     h.req('U2G_SHOOT_REQ', { bulletId: 7001, bulletType: 0, bet: 500, angle: 0, scriptIdDataVec: [] });
-    expect(h.last('G2U_SHOOT_REJECT')).toMatchObject({ bulletId: 7001, reason: 'edit' });
+    expect(h.last('G2U_SHOOT_REJECT')).toMatchObject({ bulletId: 7001, reason: 'observer' });
 
     h.sent.length = 0;
     h.req('U2G_HOME_EDIT_REQ', { editing: false });

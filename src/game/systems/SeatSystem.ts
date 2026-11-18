@@ -27,8 +27,9 @@ export class SeatSystem {
       this.seats = d.seats;
       const self = d.seats[d.yourseat];
       // 換房：飛行中的子彈 server 已退款，房間資料帶的是最新餘額
+      // 觀看模式（yourseat = -1，SPEC-UGC §2.5）沒有自己的座位資料 → 餘額沿用（之後由 SEAT_MONEY_NOTIFY seat = -1 更新）
       this.pending.clear();
-      this.serverMoney = self?.money ?? 0;
+      this.serverMoney = self?.money ?? this.serverMoney;
       const bi = this.betList.indexOf(self?.bet ?? this.betList[0]);
       this.betIndex = bi >= 0 ? bi : 0;
       events.emit('room:ready', { yourSeat: d.yourseat, roomName: d.roomName, betList: this.betList });
@@ -57,6 +58,11 @@ export class SeatSystem {
     net.on('G2U_SEAT_MONEY_NOTIFY', (d) => {
       if (d.seat === this.yourSeat) this.setServerMoney(d.seatMoney);
     });
+  }
+
+  /** 觀看模式：沒有坐在座位上（自己的家園，SPEC-UGC §2.5） */
+  get isObserver(): boolean {
+    return this.yourSeat < 0;
   }
 
   private setServerMoney(m: number): void {

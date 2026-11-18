@@ -48,6 +48,8 @@ export class AssetManager {
   /** 原版路徑 → URL */
   url(path: string): string {
     if (/^(https?:|blob:|data:|\/)/.test(path)) return path;
+    // 已經解析過的 URL（相對 base「./」建置時，c3b 的貼圖路徑 = 模型 URL 的資料夾 + 檔名），不再加一次 res/
+    if (this.baseUrl !== '/' && path.startsWith(`${this.baseUrl}res/`)) return path;
     return `${this.baseUrl}res/${path.replace(/\\/g, '/').replace(RES_PREFIX, '')}`;
   }
 

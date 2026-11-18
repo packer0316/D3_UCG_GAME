@@ -5,8 +5,10 @@ import { SCENE_DEFINES, isFishAllowedInScene, isSkyScene } from '../define/Scene
 import { BOSS_FISH_TYPES, FISH_RARITY, RARITY_SCORE, isBossCard } from './CardDefine';
 import { commissionRate, popularityLevelFactor } from './CultivateRule';
 import {
+  DAY_MS,
   MAX_BOSS_PER_SLOT,
   MAX_SLOTS,
+  NEW_HOME_DAYS,
   POPULARITY_DECO_CAP,
   POPULARITY_PER_SCENE,
   POPULARITY_PER_VISITOR,
@@ -17,7 +19,7 @@ import {
   VISITOR_MIN,
   VISITOR_SHOTS_PER_SEC,
 } from './UgcDefine';
-import { OK, fail, type HomeSlot, type HomeState, type RuleResult } from './UgcTypes';
+import { OK, fail, type HomeRanking, type HomeSlot, type HomeState, type RoomDetail, type RuleResult } from './UgcTypes';
 
 /** 新玩家的家園：森林 + 初始 11 種龍 */
 export function createDefaultHome(now: number): HomeState {
@@ -75,15 +77,27 @@ export function validateSlots(
 
 /** 人氣：放出的每種龍（稀有度分數 × 等級係數）+ 場景種類 × 5 + 裝飾物數（最多 30） */
 export function homePopularity(slots: readonly HomeSlot[], decoCount: number, levelOf: (fishType: number) => number): number {
+  return homePopularityBreakdown(slots, decoCount, levelOf).total;
+}
+
+/** 與人氣計算共用的明細，提供房間列表的數值說明。 */
+export function homePopularityBreakdown(slots: readonly HomeSlot[], decoCount: number, levelOf: (fishType: number) => number) {
   const fish = new Set<number>();
   const scenes = new Set<number>();
   for (const s of slots) {
     scenes.add(s.sceneType);
     s.fishTypes.forEach((t) => fish.add(t));
   }
-  let score = scenes.size * POPULARITY_PER_SCENE + Math.min(decoCount, POPULARITY_DECO_CAP);
-  for (const t of fish) score += (RARITY_SCORE[FISH_RARITY[t]] ?? 0) * popularityLevelFactor(levelOf(t));
-  return Math.round(score * 10) / 10;
+  const sceneScore = scenes.size * POPULARITY_PER_SCENE;
+  const decorationScore = Math.min(decoCount, POPULARITY_DECO_CAP);
+  let dragonScore = 0;
+  let score = sceneScore + decorationScore;
+  for (const t of fish) {
+    const contribution = (RARITY_SCORE[FISH_RARITY[t]] ?? 0) * popularityLevelFactor(levelOf(t));
+    dragonScore += contribution;
+    score += contribution;
+  }
+  return { fishCount: fish.size, sceneCount: scenes.size, dragonScore, sceneScore, decorationScore, total: Math.round(score * 10) / 10 };
 }
 
 /** 平均訪客數 */
@@ -107,4 +121,28 @@ export function averageCommissionRate(slots: readonly HomeSlot[], levelOf: (fish
 export function incomePerSecond(slots: readonly HomeSlot[], decoCount: number, levelOf: (fishType: number) => number): number {
   const visitors = visitorCount(homePopularity(slots, decoCount, levelOf));
   return visitors * VISITOR_SHOTS_PER_SEC * VISITOR_AVG_BET * averageCommissionRate(slots, levelOf);
+}
+
+/** 開張後過了幾天（不足一天 = 0） */
+export function homeAgeDays(createdAt: number, now: number): number {
+  return Math.max(0, Math.floor((now - createdAt) / DAY_MS));
+}
+
+/** 是不是新星家園：開張 NEW_HOME_DAYS 天內 */
+export function isNewHome(createdAt: number, now: number): boolean {
+  return now - createdAt < NEW_HOME_DAYS * DAY_MS;
+}
+
+/**
+ * 房間列表排行（SPEC-UGC §2.4）：只排家園（公有地不參加）。
+ * hot = 全部家園；rising = 開張 NEW_HOME_DAYS 天內的家園。排序：人氣高 → 開張時間新 → 房號小。
+ */
+export function rankHomes(rooms: readonly RoomDetail[], now: number): HomeRanking {
+  const homes = rooms
+    .filter((r) => r.kind === 'home')
+    .sort((a, b) => b.popularity - a.popularity || b.createdAt - a.createdAt || a.roomId - b.roomId);
+  return {
+    hot: homes.map((r) => r.roomId),
+    rising: homes.filter((r) => isNewHome(r.createdAt, now)).map((r) => r.roomId),
+  };
 }

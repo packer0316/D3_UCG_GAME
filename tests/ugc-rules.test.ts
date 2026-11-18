@@ -24,10 +24,10 @@ import {
 } from '../src/game/ugc/CultivateRule';
 import { DECO_GRID, canPlaceDeco, validateDecoLayout } from '../src/game/ugc/DecoDefine';
 import { GACHA_POOL, GACHA_RARITY_WEIGHT, applyGachaItem, gachaPoolOf, rollGacha } from '../src/game/ugc/GachaDefine';
-import { countBoss, homePopularity, incomePerSecond, slotFishIssue, validateSlots, visitorCount } from '../src/game/ugc/HomeRule';
+import { countBoss, homeAgeDays, homePopularity, incomePerSecond, rankHomes, slotFishIssue, validateSlots, visitorCount } from '../src/game/ugc/HomeRule';
 import { TICKET_DROP_CHANCE, ticketDrop } from '../src/game/ugc/TicketRule';
 import { MAX_BOSS_PER_SLOT, MAX_LEVEL, MAX_SLOTS, STARTER_FISH } from '../src/game/ugc/UgcDefine';
-import type { HomeSlot, Rarity } from '../src/game/ugc/UgcTypes';
+import type { HomeSlot, Rarity, RoomDetail } from '../src/game/ugc/UgcTypes';
 import { createInitialProfile, sanitizeProfile } from '../src/server-fake/ugc/ProfileStore';
 import { NPC_HOMES } from '../src/server-fake/ugc/npcHomes';
 
@@ -87,15 +87,21 @@ describe('家園輪替表', () => {
   });
 
   it('NPC 家園都符合規則', () => {
-    expect(NPC_HOMES.length).toBe(8);
+    expect(NPC_HOMES.length).toBe(32);
+    expect(new Set(NPC_HOMES.map(h => h.name)).size).toBe(NPC_HOMES.length);
+    expect(new Set(NPC_HOMES.map(h => h.accountId)).size).toBe(NPC_HOMES.length);
     for (const h of NPC_HOMES) {
       expect(validateSlots(h.slots, all, all), h.name).toEqual({ ok: true });
       const owned: Record<string, number> = {};
       for (const d of h.deco) owned[d.id] = (owned[d.id] ?? 0) + 1;
       expect(validateDecoLayout(h.deco, owned), h.name).toEqual({ ok: true });
       expect(h.deco.length, h.name).toBeGreaterThan(0);
+      expect(h.host.title.length, h.name).toBeGreaterThan(0);
+      expect(h.host.bio.length, h.name).toBeGreaterThan(0);
+      expect(CARD_FISH_TYPES, h.name).toContain(h.host.portrait);
+      for (const level of Object.values(h.levels)) expect(level >= 1 && level <= MAX_LEVEL, h.name).toBe(true);
     }
-    expect(NPC_HOMES.map((h) => h.roomId)).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(NPC_HOMES.map((h) => h.roomId)).toEqual(Array.from({ length: 32 }, (_, i) => i + 3));
   });
 
   it('人氣：等級越高、內容越多越高；訪客數夾在 0.2 ~ 3', () => {
@@ -362,5 +368,23 @@ describe('存檔整理', () => {
     expect(p.fish[24]).toEqual({ level: MAX_LEVEL, copies: 4 });
     expect(p.home.slots).toEqual([{ sceneType: Forest, fishTypes: [...STARTER_FISH] }]);
     expect(p.home.deco).toEqual([]);
+    // 舊存檔沒有開張時間 → 當作現在建立；未來時間夾回現在（§2.4）
+    expect(p.createdAt).toBe(0);
+    const legacy = { ...raw };
+    delete legacy.createdAt;
+    expect(sanitizeProfile(legacy, 5000)!.createdAt).toBe(5000);
+    expect(sanitizeProfile({ ...raw, createdAt: 1234 }, 5000)!.createdAt).toBe(1234);
+    expect(sanitizeProfile({ ...raw, createdAt: 99_999 }, 5000)!.createdAt).toBe(5000);
+  });
+
+  it('家園排行：公有地不排；人氣高 → 開張新 → 房號小；新星 = 3 天內（§2.4）', () => {
+    const day = 86_400_000;
+    const now = 100 * day;
+    const room = (roomId: number, popularity: number, daysAgo: number, kind: 'home' | 'public' = 'home') =>
+      ({ roomId, kind, popularity, createdAt: now - daysAgo * day }) as RoomDetail;
+    const rooms = [room(1, 0, 0, 'public'), room(2, 30, 1), room(3, 50, 10), room(4, 30, 0.5), room(5, 30, 0.5), room(6, 10, 3)];
+    expect(rankHomes(rooms, now)).toEqual({ hot: [3, 4, 5, 2, 6], rising: [4, 5, 2] });
+    expect(homeAgeDays(now - 0.4 * day, now)).toBe(0);
+    expect(homeAgeDays(now - 2.9 * day, now)).toBe(2);
   });
 });

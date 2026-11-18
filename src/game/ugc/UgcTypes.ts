@@ -51,9 +51,20 @@ export interface PlayerProfile {
   decos: Record<string, number>;
   home: HomeState;
   stats: { draws: number; ticketsEarned: number };
+  /** 建立存檔的時間（毫秒）= 家園開張時間（SPEC-UGC §2.4） */
+  createdAt: number;
 }
 
 export type RoomKind = 'public' | 'home';
+
+/** 房間目錄中的屋主介紹；與玩家資產、養成等級分開。 */
+export interface RoomHostProfile {
+  /** 怪趣玩家頭貼圖集的格號（0–31）；未設定時使用原本龍種頭像。 */
+  avatarIndex?: number;
+  portrait: number;
+  title: string;
+  bio: string;
+}
 
 /** 房間內容（房間列表、進房通知共用） */
 export interface RoomDetail {
@@ -63,6 +74,7 @@ export interface RoomDetail {
   name: string;
   ownerId: number;
   ownerName: string;
+  host?: RoomHostProfile;
   /** 是不是我的家園 */
   isMine: boolean;
   /** 場景輪替表 */
@@ -75,6 +87,16 @@ export interface RoomDetail {
   visitors: number;
   /** 每格秒數 */
   slotSeconds: number;
+  /** 家園開張時間（毫秒；公有地 0；SPEC-UGC §2.4） */
+  createdAt: number;
+}
+
+/** 房間列表的家園排行（SPEC-UGC §2.4）：房號依名次排列 */
+export interface HomeRanking {
+  /** 全部家園，依人氣 */
+  hot: number[];
+  /** 開張 NEW_HOME_DAYS 天內的家園，依人氣 */
+  rising: number[];
 }
 
 /** 進房通知：房間內容 + 目前在第幾格 */

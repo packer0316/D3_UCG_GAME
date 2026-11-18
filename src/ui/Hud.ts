@@ -23,6 +23,14 @@ import type { UIRoot } from './UIRoot';
 export const HUD_PLISTS = ['DinosaurExport/plist/MainUI.plist', 'DinosaurExport/plist/common.plist'];
 export const SEAT_INFO_CSD = 'DinosaurExport/main/SeatInfo.csd';
 
+/** 開砲被拒的提示（G2U_SHOOT_REJECT.reason；observer = 自己的家園觀看模式，SPEC-UGC §2.5） */
+const SHOOT_REJECT_TEXT: Record<string, string> = {
+  money: '餘額不足',
+  bet: '押注無效',
+  edit: '裝潢中不能開砲',
+  observer: '在自己的家園只能觀看，到公有地或別人的家園打龍',
+};
+
 /** CreateTouchListener isActivateAction：按下 ScaleTo(0.2, 0.85) */
 const BET_BTN_PRESS_SCALE = 0.85;
 /** FishBaseBetBtn ConditionTable：長按超過 ThresHoldTime 秒後，每 ConditionVal 秒觸發一次 */
@@ -100,7 +108,7 @@ export class Hud {
     events.on('seat:update', ({ seat, data }) => this.renderSeat(seat, data));
     events.on('seat:money', ({ seat, money }) => this.seats[seat]?.goldNum?.setText(formatCurrency(Math.max(money, 0))));
     events.on('seat:bet', ({ seat, bet }) => this.seats[seat]?.cannonNum?.setText(String(bet)));
-    events.on('shoot:reject', ({ reason }) => ui.toast(reason === 'money' ? '餘額不足' : '押注無效'));
+    events.on('shoot:reject', ({ reason }) => ui.toast(SHOOT_REJECT_TEXT[reason] ?? '押注無效'));
   }
 
   private layout(): void {

@@ -2,7 +2,7 @@
  * UGC 協定（SPEC-UGC §10）：以 declaration merging 加進 @net/protocol，不改原本的協定檔。
  * client（features/ugc）與假 server（server-fake/ugc）都要 import 這個檔。
  */
-import type { DecoPlacement, GachaResult, HomeIncome, HomeSlot, LevelUpAllPlan, PlayerProfile, RoomDetail, RoomState } from './UgcTypes';
+import type { DecoPlacement, GachaResult, HomeIncome, HomeRanking, HomeSlot, LevelUpAllPlan, PlayerProfile, RoomDetail, RoomState } from './UgcTypes';
 
 /** 請求的共通回覆 */
 export interface UgcAck {
@@ -36,7 +36,8 @@ declare module '@net/protocol' {
   }
 
   interface ServerToClient {
-    G2U_ROOM_LIST_ACK: { rooms: RoomDetail[]; currentRoomId: number };
+    /** 房間列表；hot / rising = 家園排行（房號依名次，SPEC-UGC §2.4）；now = server 時間（算「N 天前開張」） */
+    G2U_ROOM_LIST_ACK: { rooms: RoomDetail[]; currentRoomId: number; now: number } & HomeRanking;
     G2U_ENTER_ROOM_ACK: UgcAck & { roomId: number };
     /** 進房：房間內容（緊接在 G2U_ROOM_DATA_NOTIFY 之前送） */
     G2U_ROOM_INFO_NOTIFY: { room: RoomState };

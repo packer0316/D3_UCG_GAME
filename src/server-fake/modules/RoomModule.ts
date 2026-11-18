@@ -78,6 +78,16 @@ export class RoomModule implements FakeServerModule {
     return this.seats[this.yourSeat]!;
   }
 
+  /** 有沒有坐在座位上：自己的家園是觀看模式，不坐、不能開砲（SPEC-UGC §2.5） */
+  get seated(): boolean {
+    return !this.current.isMine;
+  }
+
+  /** 送給 client 的「我的座位」：觀看模式 = -1 */
+  get seatIndex(): number {
+    return this.seated ? this.yourSeat : -1;
+  }
+
   // ------------------------------------------------------------------
   // 餘額（以玩家資產為準）
   // ------------------------------------------------------------------
@@ -93,7 +103,7 @@ export class RoomModule implements FakeServerModule {
   /** 其他模組直接改了 profile.money（抽卡 / 升級 / 領取）→ 同步座位並通知 client */
   syncMoney(): void {
     this.self.money = this.server.profile.profile.money;
-    this.server.send('G2U_SEAT_MONEY_NOTIFY', { seat: this.yourSeat, seatMoney: this.self.money });
+    this.server.send('G2U_SEAT_MONEY_NOTIFY', { seat: this.seatIndex, seatMoney: this.self.money });
   }
 
   /** debug：補錢 */
@@ -166,13 +176,16 @@ export class RoomModule implements FakeServerModule {
   private sendRoomData(): void {
     const s = this.server;
     s.send('G2U_ROOM_INFO_NOTIFY', { room: this.state() });
+    // 觀看模式（自己的家園）：不坐座位 → yourseat = -1、座位全空
     s.send('G2U_ROOM_DATA_NOTIFY', {
-      yourseat: this.yourSeat,
+      yourseat: this.seatIndex,
       sceneType: this.sceneType,
-      seats: this.seats,
+      seats: this.seated ? this.seats : this.seats.map((seat, i) => (i === this.yourSeat ? null : seat)),
       betList: this.betList,
       roomName: this.current.name,
     });
+    // 觀看模式的房間資料不帶我的座位（也就沒有餘額）→ 另外送一次，含換房退回的子彈
+    if (!this.seated) s.send('G2U_SEAT_MONEY_NOTIFY', { seat: -1, seatMoney: this.self.money });
   }
 
   get isHome(): boolean {

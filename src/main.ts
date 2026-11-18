@@ -1,5 +1,9 @@
 import './style.css';
 import { GameApp, type LoadingView } from '@app/GameApp';
+import { installPackedBinary } from '@app/packedBinary';
+
+// Artifact 發佈版：二進位資源以 *.b64.txt 提供（tools/build-artifact.mjs）
+if (import.meta.env.VITE_PACKED_BINARY === '1') installPackedBinary();
 
 const container = document.getElementById('game')!;
 const loadingEl = document.getElementById('loading')!;

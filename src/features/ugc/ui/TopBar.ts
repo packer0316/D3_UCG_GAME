@@ -1,6 +1,6 @@
 /**
  * 上方功能列（SPEC-UGC §2.1）：房間（目前房間 / 場景）、魚卡、抽卡（券數）、家園（未領取抽成），
- * 以及在別人家園時的屋主資訊（已貢獻的抽成）。取代原本左上角的房間名稱。
+ * 以及在別人家園時的屋主、在自己家園時的觀看模式與人氣。取代原本左上角的房間名稱。
  */
 import type { GameContext } from '@game/GameContext';
 import type { UgcClient } from '../UgcClient';
@@ -57,7 +57,6 @@ export class TopBar {
     });
     events.on('ugc:profile', ({ profile }) => (this.ticketBadge.textContent = fmt(profile.tickets)));
     events.on('ugc:income', () => this.renderIncome());
-    events.on('ugc:commission', () => this.renderRoom());
     this.renderRoom();
   }
 
@@ -76,10 +75,10 @@ export class TopBar {
     const n = room.slots.length;
     this.roomSub.textContent = `${sceneName(scene)}${n > 1 ? `　${room.slotIndex + 1} / ${n}` : ''}`;
 
-    // 別人的家園：屋主 + 我貢獻的抽成；自己的家園：訪客數
+    // 別人的家園：只顯示屋主（不顯示已貢獻抽成）；自己的家園：觀看模式 + 人氣 / 訪客（SPEC-UGC §2.1、§2.5）
     let text = '';
-    if (room.kind === 'home' && !room.isMine) text = `屋主 ${room.ownerName}　已貢獻抽成 ${fmt(this.ugc.visitCommission)}`;
-    else if (room.isMine) text = `人氣 ${room.popularity}　訪客約 ${room.visitors} 人`;
+    if (room.kind === 'home' && !room.isMine) text = `屋主 ${room.ownerName}`;
+    else if (room.isMine) text = `觀看中　人氣 ${room.popularity}　訪客約 ${room.visitors} 人`;
     this.visit.textContent = text;
     this.visit.classList.toggle('hidden', !text);
   }

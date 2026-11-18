@@ -37,10 +37,18 @@ export class ShootModule implements FakeServerModule {
       const seat = room().self;
       const rate = COST_RATE[req.bulletType];
       const cost = req.bet * (rate ?? 1);
-      // 裝潢模式不能開砲
-      const reason = room().editing ? 'edit' : rate === undefined || !room().betList.includes(req.bet) ? 'bet' : seat.money < cost ? 'money' : null;
+      // 自己的家園是觀看模式（SPEC-UGC §2.5）；裝潢模式不能開砲
+      const reason = !room().seated
+        ? 'observer'
+        : room().editing
+          ? 'edit'
+          : rate === undefined || !room().betList.includes(req.bet)
+            ? 'bet'
+            : seat.money < cost
+              ? 'money'
+              : null;
       if (reason) {
-        server.send('G2U_SHOOT_REJECT', { bulletId: req.bulletId, reason, seatMoney: seat.money });
+        server.send('G2U_SHOOT_REJECT', { bulletId: req.bulletId, reason, seatMoney: room().self.money });
         return;
       }
       room().addMoney(-cost);
